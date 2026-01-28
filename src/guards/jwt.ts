@@ -82,7 +82,7 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 	// Import HMAC key once per guard instance (reused across requests)
 	const encoder = new TextEncoder();
 	// Ensure keyData is a Uint8Array backed by ArrayBuffer (not ArrayBufferLike)
-	let keyData: Uint8Array;
+	let keyData: Uint8Array<ArrayBuffer>;
 	if (typeof options.secret === "string") {
 		keyData = encoder.encode(options.secret);
 	} else {
@@ -262,7 +262,7 @@ async function verifyHS256(
 		// Ensure signature is backed by ArrayBuffer (not ArrayBufferLike)
 		// Create a new ArrayBuffer and copy the data to ensure ArrayBuffer backing
 		const signatureBuffer = new ArrayBuffer(decodedSignature.length);
-		const signature = new Uint8Array(signatureBuffer);
+		const signature: Uint8Array<ArrayBuffer> = new Uint8Array(signatureBuffer);
 		signature.set(decodedSignature);
 
 		// Get the imported key (reused across requests)
