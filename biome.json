@@ -11,17 +11,5 @@
 		"enabled": true,
 		"indentStyle": "tab",
 		"indentWidth": 2
-	},
-	"overrides": [
-		{
-			"includes": ["src/index.ts"],
-			"assist": {
-				"actions": {
-					"source": {
-						"organizeImports": "off"
-					}
-				}
-			}
-		}
-	]
+	}
 }

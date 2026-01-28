@@ -36,42 +36,36 @@
  * ```
  */
 
-// Types
-export type {
-	AuthUser,
-	Guard,
-	AuthConfig,
-	AuthStorage,
-	GuardInput,
-	AuthContext,
-	AuthManagerInterface,
-	InstallableAuthManager,
-	AuthPlugin,
-	AuthPluginRouter,
-} from "./types.js";
-
-// Auth Manager
-export { createAuthManager } from "./manager.js";
-
 // App-scoped integration
 export { createAuth } from "./appScoped.js";
-
+export type { BasicGuardOptions } from "./guards/basic.js";
+export { createBasicGuard } from "./guards/basic.js";
+export type { JwtGuardOptions } from "./guards/jwt.js";
+// Guards
+export { createJwtGuard } from "./guards/jwt.js";
 // Helpers
 export {
 	auth,
-	setAuthManager,
-	getAuthManager,
 	clearAuthManager,
+	getAuthManager,
+	setAuthManager,
 } from "./helpers.js";
-
-// Storage
-export { createCookieStorage } from "./storage.js";
-
-// Guards
-export { createJwtGuard } from "./guards/jwt.js";
-export type { JwtGuardOptions } from "./guards/jwt.js";
-export { createBasicGuard } from "./guards/basic.js";
-export type { BasicGuardOptions } from "./guards/basic.js";
-
+// Auth Manager
+export { createAuthManager } from "./manager.js";
 // Plugins
 export { installAuthPlugin } from "./plugin.js";
+// Storage
+export { createCookieStorage } from "./storage.js";
+// Types
+export type {
+	AuthConfig,
+	AuthContext,
+	AuthManagerInterface,
+	AuthPlugin,
+	AuthPluginRouter,
+	AuthStorage,
+	AuthUser,
+	Guard,
+	GuardInput,
+	InstallableAuthManager,
+} from "./types.js";
