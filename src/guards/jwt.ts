@@ -203,14 +203,13 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 }
 
 /**
- * Decode base64url-encoded string.
+ * Decode base64url-encoded string (UTF-8).
  */
 function base64UrlDecode(str: string): string {
-	// Convert base64url to base64
-	const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-	// Add padding if needed
-	const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-	return atob(padded);
+	// Decode to Uint8Array first, then decode UTF-8
+	const bytes = base64UrlDecodeToUint8Array(str);
+	const decoder = new TextDecoder("utf-8");
+	return decoder.decode(bytes);
 }
 
 /**

@@ -356,6 +356,34 @@ describe("createJwtGuard", () => {
 		// Should return null, not throw
 		expect(user).toBeNull();
 	});
+
+	test("handles UTF-8 non-ASCII characters in payload", async () => {
+		const guard = createJwtGuard({
+			secret,
+		});
+
+		// Create token with non-ASCII characters (emoji, accented chars, etc.)
+		const token = await createTestJwt(
+			{
+				sub: "123",
+				name: "José",
+				emoji: "🚀",
+				chinese: "你好",
+				exp: Math.floor(Date.now() / 1000) + 3600,
+			},
+			secret,
+		);
+
+		const request = new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		const user = await guard.authenticate(request);
+
+		expect(user).not.toBeNull();
+		expect(user?.name).toBe("José");
+		expect(user?.emoji).toBe("🚀");
+		expect(user?.chinese).toBe("你好");
+	});
 });
 
 // Helper function to create a test JWT (HS256)
@@ -378,7 +406,11 @@ async function createTestJwt(
 }
 
 function base64UrlEncode(str: string): string {
-	return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+	// Encode UTF-8 string to base64url
+	const encoder = new TextEncoder();
+	const bytes = encoder.encode(str);
+	const binary = String.fromCharCode(...bytes);
+	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
 function base64UrlEncodeUint8Array(bytes: Uint8Array): string {
