@@ -98,7 +98,14 @@ function parseCookieHeader(header: string | null): Map<string, string> {
 		const name = trimmed.slice(0, idx).trim();
 		const value = trimmed.slice(idx + 1).trim();
 		if (!name) continue;
-		map.set(name, decodeURIComponent(value));
+		// Guard against invalid percent-encoding (e.g. stray %)
+		let decoded: string;
+		try {
+			decoded = decodeURIComponent(value);
+		} catch {
+			decoded = value; // Fall back to raw value if decoding fails
+		}
+		map.set(name, decoded);
 	}
 
 	return map;

@@ -41,4 +41,16 @@ describe("AuthStorage (cookie-first)", () => {
 		const setCookie = response.headers.get("set-cookie");
 		expect(setCookie?.toLowerCase()).toContain("max-age=60");
 	});
+
+	test("get() handles malformed percent-encoding gracefully (falls back to raw value)", () => {
+		const storage = createCookieStorage({ cookiePrefix: "bunary_" });
+		// Cookie with invalid percent-encoding (stray %)
+		const request = new Request("http://localhost/", {
+			headers: { cookie: "bunary_oauth_state=abc%xyz" },
+		});
+
+		// Should not throw; should return raw value
+		expect(() => storage.get(request, "oauth_state")).not.toThrow();
+		expect(storage.get(request, "oauth_state")).toBe("abc%xyz");
+	});
 });
