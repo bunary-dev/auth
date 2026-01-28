@@ -60,6 +60,8 @@ export {
 export { createCookieStorage } from "./storage.js";
 
 // Guards
+export { createJwtGuard } from "./guards/jwt.js";
+export type { JwtGuardOptions } from "./guards/jwt.js";
 export { createBasicGuard } from "./guards/basic.js";
 export type { BasicGuardOptions } from "./guards/basic.js";
 

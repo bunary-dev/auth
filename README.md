@@ -57,6 +57,8 @@ const user = authCtx.user();
 Creates a new authentication manager instance.
 
 ```ts
+import { createAuthManager } from "@bunary/auth";
+
 const manager = createAuthManager({
   defaultGuard: "jwt",
   guards: { jwt: jwtGuard },
@@ -184,6 +186,28 @@ const auth = manager.createContext({ request });
 await auth.authenticate("google");
 ```
 
+## Built-in Guards
+
+**JWT Bearer Guard:**
+```typescript
+import { createJwtGuard, createAuthManager } from "@bunary/auth";
+
+const jwtGuard = createJwtGuard({
+  secret: process.env.JWT_SECRET!,
+  issuer: "my-app",
+  audience: "api",
+  mapUser: (payload) => ({
+    id: payload.sub as string,
+    email: payload.email as string,
+  })
+});
+
+const manager = createAuthManager({
+  defaultGuard: "jwt",
+  guards: { jwt: jwtGuard }
+});
+```
+
 ## Guard Interface
 
 Guards are responsible for authenticating requests. Implement the `Guard` interface:
@@ -270,6 +294,14 @@ interface AuthConfig {
   defaultGuard: string;
   guards: Record<string, Guard>;
 }
+
+interface JwtGuardOptions {
+  name?: string;
+  secret: string | Uint8Array;
+  issuer?: string;
+  audience?: string | string[];
+  clockToleranceSeconds?: number;
+  mapUser?: (payload: Record<string, unknown>) => AuthUser | null;
 
 interface BasicGuardOptions {
   name?: string;

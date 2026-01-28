@@ -61,6 +61,24 @@ storage.clear(response, "oauth_state");
 
 ## Built-in Guards
 
+### JWT Bearer
+
+For JWT token authentication (HS256):
+
+```ts
+import { createJwtGuard, createAuthManager } from "@bunary/auth";
+
+const jwtGuard = createJwtGuard({
+  secret: process.env.JWT_SECRET!,
+  issuer: "my-app",
+  audience: "api",
+});
+
+const manager = createAuthManager({
+  defaultGuard: "jwt",
+  guards: { jwt: jwtGuard }
+```
+
 ### Basic Auth
 
 For simple username/password authentication:

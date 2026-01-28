@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `createJwtGuard()` factory for JWT Bearer authentication (HS256)
+- Verifies signatures using WebCrypto API (no external dependencies)
+- Validates standard claims (exp, nbf, iss, aud)
+- Supports clock tolerance for exp/nbf validation
+- Customizable user mapping via `mapUser` function
+
 - `createBasicGuard()` factory for Basic Authentication (HTTP Basic Auth)
 - Handles malformed headers safely (returns null, never throws)
 - Supports both async and synchronous verify functions
