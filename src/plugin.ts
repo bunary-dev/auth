@@ -16,7 +16,7 @@ import type {
  *
  * @param manager - The auth manager to install the plugin into (must be created by `createAuthManager()`)
  * @param plugin - The plugin to install
- * @param pluginOptions - Optional plugin-specific configuration
+ * @param pluginOptions - Optional plugin-specific configuration (defaults to `{}` if omitted)
  *
  * @throws {Error} If the manager doesn't support plugin installation (missing `_guards` property)
  *
@@ -75,8 +75,8 @@ export function installAuthPlugin(
 		plugin.routes(routerStub);
 	}
 
-	// Call configure callback if provided
-	if (plugin.configure && pluginOptions !== undefined) {
-		plugin.configure(pluginOptions);
+	// Call configure callback if provided (always called with options, defaulting to {})
+	if (plugin.configure) {
+		plugin.configure(pluginOptions ?? {});
 	}
 }

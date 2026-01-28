@@ -101,7 +101,7 @@ describe("AuthPlugin", () => {
 		expect(routesCalled).toBe(true);
 	});
 
-	test("installAuthPlugin() calls configure callback when provided", () => {
+	test("installAuthPlugin() calls configure callback when provided (with options)", () => {
 		const manager = createAuthManager({
 			defaultGuard: "jwt",
 			guards: {
@@ -115,16 +115,48 @@ describe("AuthPlugin", () => {
 		});
 
 		let configureCalled = false;
+		let receivedOptions: Record<string, unknown> | undefined;
 		const plugin: AuthPlugin = {
 			name: "configure-plugin",
 			configure: (options) => {
 				configureCalled = true;
+				receivedOptions = options;
 				expect(typeof options).toBe("object");
 			},
 		};
 
-		installAuthPlugin(manager, plugin, {});
+		installAuthPlugin(manager, plugin, { clientId: "test" });
 		expect(configureCalled).toBe(true);
+		expect(receivedOptions).toEqual({ clientId: "test" });
+	});
+
+	test("installAuthPlugin() calls configure callback with empty object when options omitted", () => {
+		const manager = createAuthManager({
+			defaultGuard: "jwt",
+			guards: {
+				jwt: {
+					name: "jwt",
+					async authenticate() {
+						return null;
+					},
+				},
+			},
+		});
+
+		let configureCalled = false;
+		let receivedOptions: Record<string, unknown> | undefined;
+		const plugin: AuthPlugin = {
+			name: "configure-plugin",
+			configure: (options) => {
+				configureCalled = true;
+				receivedOptions = options;
+				expect(typeof options).toBe("object");
+			},
+		};
+
+		installAuthPlugin(manager, plugin);
+		expect(configureCalled).toBe(true);
+		expect(receivedOptions).toEqual({});
 	});
 
 	test("installAuthPlugin() works with plugin that has only guards", () => {
