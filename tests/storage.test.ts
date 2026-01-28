@@ -17,8 +17,10 @@ describe("AuthStorage (cookie-first)", () => {
 		const setCookie = response.headers.get("set-cookie");
 		expect(setCookie).toContain("bunary_oauth_state=");
 
+		// Extract just the name=value part (before first semicolon) to simulate real Cookie header
+		const cookieValue = setCookie?.split(";")[0] ?? "";
 		const nextRequest = new Request("http://localhost/", {
-			headers: { cookie: setCookie ?? "" },
+			headers: { cookie: cookieValue },
 		});
 		expect(storage.get(nextRequest, "oauth_state")).toBe("abc123");
 	});
