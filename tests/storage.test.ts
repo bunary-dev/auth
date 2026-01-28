@@ -77,4 +77,18 @@ describe("AuthStorage (cookie-first)", () => {
 		expect(setCookie).toContain("bunary_oauth_state=");
 		expect(setCookie?.toLowerCase()).not.toContain("max-age");
 	});
+
+	test("sameSite: 'none' automatically sets secure: true (browser requirement)", () => {
+		const storage = createCookieStorage({
+			cookiePrefix: "bunary_",
+			sameSite: "none",
+			secure: false, // Explicitly set to false
+		});
+		const response = new Response("ok");
+
+		storage.set(response, "oauth_state", "abc123");
+		const setCookie = response.headers.get("set-cookie");
+		expect(setCookie?.toLowerCase()).toContain("samesite=none");
+		expect(setCookie?.toLowerCase()).toContain("secure");
+	});
 });

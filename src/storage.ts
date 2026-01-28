@@ -23,6 +23,9 @@ export type CookieStorageOptions = Readonly<{
 	secure?: boolean;
 	/**
 	 * SameSite mode. Defaults to `"lax"`.
+	 *
+	 * **Note**: When `sameSite: "none"`, browsers require `Secure` to be set.
+	 * This is automatically enforced (secure is overridden to `true`).
 	 */
 	sameSite?: "lax" | "strict" | "none";
 }>;
@@ -39,8 +42,13 @@ export function createCookieStorage(
 	const prefix = options.cookiePrefix ?? "bunary_";
 	const path = options.path ?? "/";
 	const httpOnly = options.httpOnly ?? true;
-	const secure = options.secure ?? true;
+	let secure = options.secure ?? true;
 	const sameSite = options.sameSite ?? "lax";
+
+	// Browsers require SameSite=None cookies to also set Secure
+	if (sameSite === "none") {
+		secure = true;
+	}
 
 	return {
 		get(request: Request, key: string): string | null {
