@@ -334,6 +334,28 @@ describe("createJwtGuard", () => {
 		// Should match because token audience includes "audience1"
 		expect(user).not.toBeNull();
 	});
+
+	test("returns null when mapUser throws", async () => {
+		const guard = createJwtGuard({
+			secret,
+			mapUser: () => {
+				throw new Error("Mapper error");
+			},
+		});
+
+		const token = await createTestJwt(
+			{ sub: "123", exp: Math.floor(Date.now() / 1000) + 3600 },
+			secret,
+		);
+
+		const request = new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		const user = await guard.authenticate(request);
+
+		// Should return null, not throw
+		expect(user).toBeNull();
+	});
 });
 
 // Helper function to create a test JWT (HS256)

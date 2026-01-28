@@ -180,7 +180,12 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 
 			// Map payload to user
 			if (options.mapUser) {
-				return options.mapUser(payload);
+				try {
+					return options.mapUser(payload);
+				} catch {
+					// Mapper threw - return null (don't throw)
+					return null;
+				}
 			}
 
 			// Default mapping: use sub as id, spread rest of payload
