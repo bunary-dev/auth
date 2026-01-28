@@ -602,9 +602,12 @@ function base64UrlEncodeUint8Array(bytes: Uint8Array): string {
 	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
-async function signHS256(message: string, secret: string | Uint8Array): Promise<Uint8Array> {
+async function signHS256(
+	message: string,
+	secret: string | Uint8Array,
+): Promise<Uint8Array> {
 	const encoder = new TextEncoder();
-	let keyData: Uint8Array;
+	let keyData: Uint8Array<ArrayBuffer>;
 	if (typeof secret === "string") {
 		keyData = encoder.encode(secret);
 	} else {
