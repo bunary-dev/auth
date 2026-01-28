@@ -59,5 +59,9 @@ export {
 // Storage
 export { createCookieStorage } from "./storage.js";
 
+// Guards
+export { createBasicGuard } from "./guards/basic.js";
+export type { BasicGuardOptions } from "./guards/basic.js";
+
 // Plugins
 export { installAuthPlugin } from "./plugin.js";

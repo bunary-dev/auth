@@ -195,6 +195,29 @@ interface Guard {
 }
 ```
 
+### Built-in Guards
+
+**Basic Auth Guard:**
+```typescript
+import { createBasicGuard } from "@bunary/auth";
+
+const basicGuard = createBasicGuard({
+  name: "admin",
+  async verify(username, password) {
+    // Check credentials against your database or config
+    if (username === "admin" && password === "secret") {
+      return { id: 1, username: "admin", role: "administrator" };
+    }
+    return null;
+  }
+});
+
+const manager = createAuthManager({
+  defaultGuard: "admin",
+  guards: { admin: basicGuard }
+});
+```
+
 ### Example Guards
 
 **JWT Guard:**
@@ -246,6 +269,11 @@ interface Guard {
 interface AuthConfig {
   defaultGuard: string;
   guards: Record<string, Guard>;
+}
+
+interface BasicGuardOptions {
+  name?: string;
+  verify: (username: string, password: string, request: Request) => Promise<AuthUser | null> | AuthUser | null;
 }
 ```
 
