@@ -40,6 +40,8 @@ export type {
 	GuardInput,
 	AuthContext,
 	AuthManagerInterface,
+	AuthPlugin,
+	AuthPluginRouter,
 } from "./types.js";
 
 // Auth Manager
@@ -55,3 +57,6 @@ export {
 
 // Storage
 export { createCookieStorage } from "./storage.js";
+
+// Plugins
+export { installAuthPlugin } from "./plugin.js";

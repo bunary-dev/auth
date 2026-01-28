@@ -32,6 +32,14 @@ import type {
 } from "./types.js";
 
 export function createAuthManager(config: AuthConfig): AuthManagerInterface {
+	// Store guards internally so they can be modified by plugins
+	const guards = new Map<string, Guard>();
+	for (const [name, guard] of Object.entries(config.guards)) {
+		guards.set(name, guard);
+	}
+
+	const defaultGuardName = config.defaultGuard;
+
 	return {
 		/**
 		 * Get a guard by name.
@@ -41,8 +49,8 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 		 * @throws If the guard doesn't exist
 		 */
 		guard(name?: string): Guard {
-			const guardName = name ?? config.defaultGuard;
-			const guard = config.guards[guardName];
+			const guardName = name ?? defaultGuardName;
+			const guard = guards.get(guardName);
 
 			if (!guard) {
 				throw new Error(`Guard "${guardName}" is not defined`);
@@ -86,5 +94,7 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 				},
 			};
 		},
-	};
+		// Internal: expose guards map for plugin installation
+		_guards: guards,
+	} as AuthManagerInterface & { _guards: Map<string, Guard> };
 }

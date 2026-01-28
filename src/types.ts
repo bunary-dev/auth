@@ -190,3 +190,74 @@ export interface AuthStorage {
 	 */
 	clear(response: Response, key: string): Promise<void> | void;
 }
+
+/**
+ * Router interface for plugin route registration.
+ *
+ * This is a minimal interface that allows plugins to register routes
+ * (e.g., OAuth redirect/callback endpoints). Full integration depends
+ * on HTTP package middleware hooks (see auth issue #15).
+ */
+export interface AuthPluginRouter {
+	/**
+	 * Register a route. Implementation depends on HTTP integration.
+	 */
+	get(
+		path: string,
+		handler: (request: Request) => Response | Promise<Response>,
+	): void;
+	post(
+		path: string,
+		handler: (request: Request) => Response | Promise<Response>,
+	): void;
+}
+
+/**
+ * Authentication plugin contract for third-party providers.
+ *
+ * Plugins can provide guards, optional routes (OAuth callbacks), and
+ * configuration validation/defaults.
+ *
+ * @example
+ * ```ts
+ * const googleAuthPlugin: AuthPlugin = {
+ *   name: "google",
+ *   guards: {
+ *     google: {
+ *       name: "google",
+ *       async authenticate(request) {
+ *         // Validate Google OAuth token
+ *         return user;
+ *       }
+ *     }
+ *   },
+ *   routes: (router) => {
+ *     router.get("/auth/google", handleGoogleRedirect);
+ *     router.get("/auth/google/callback", handleGoogleCallback);
+ *   }
+ * };
+ * ```
+ */
+export interface AuthPlugin {
+	/** Unique name for this plugin */
+	name: string;
+
+	/**
+	 * Guards provided by this plugin.
+	 * Guards are merged into the auth manager (can override existing guards).
+	 */
+	guards?: Record<string, Guard>;
+
+	/**
+	 * Optional route registration callback.
+	 * Called during plugin installation to register OAuth redirect/callback routes.
+	 * Full integration depends on HTTP package middleware hooks (see auth issue #15).
+	 */
+	routes?: (router: AuthPluginRouter) => void;
+
+	/**
+	 * Optional configuration callback.
+	 * Called during installation to validate/apply plugin-specific options.
+	 */
+	configure?: (options: Record<string, unknown>) => void;
+}
