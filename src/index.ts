@@ -5,29 +5,34 @@
  *
  * @example
  * ```ts
- * import { createAuthManager, setAuthManager, auth } from "@bunary/auth";
+ * import { createApp } from "@bunary/http";
+ * import { createAuth, createJwtGuard } from "@bunary/auth";
+ * import type { AuthContext } from "@bunary/auth";
  *
- * const authManager = createAuthManager({
+ * const app = createApp();
+ *
+ * // Create app-scoped auth middleware
+ * const authMiddleware = createAuth({
  *   defaultGuard: "jwt",
  *   guards: {
- *     jwt: {
- *       name: "jwt",
- *       async authenticate(request) {
- *         const token = request.headers.get("Authorization")?.replace("Bearer ", "");
- *         if (!token) return null;
- *         // Validate and decode JWT
- *         return { id: 1, name: "John" };
- *       }
- *     }
+ *     jwt: createJwtGuard({ secret: process.env.JWT_SECRET! })
  *   }
  * });
  *
- * setAuthManager(authManager);
+ * // Use middleware to attach auth context
+ * app.use(authMiddleware);
  *
- * // In a route handler
- * const ctx = auth({ request });
- * await ctx.authenticate();
- * const user = ctx.user();
+ * // Access auth in route handlers
+ * app.get("/profile", (ctx) => {
+ *   const auth = ctx.locals.auth as AuthContext;
+ *   if (!auth.check()) {
+ *     return new Response(JSON.stringify({ error: "Unauthorized" }), {
+ *       status: 401,
+ *       headers: { "Content-Type": "application/json" }
+ *     });
+ *   }
+ *   return { user: auth.user() };
+ * });
  * ```
  */
 
@@ -47,6 +52,9 @@ export type {
 
 // Auth Manager
 export { createAuthManager } from "./manager.js";
+
+// App-scoped integration
+export { createAuth } from "./appScoped.js";
 
 // Helpers
 export {

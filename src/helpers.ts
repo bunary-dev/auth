@@ -10,6 +10,7 @@ let globalAuthManager: AuthManagerInterface | null = null;
  *
  * This must be called before using the `auth()` helper.
  *
+ * @deprecated Use `createAuth()` middleware for app-scoped integration instead. Global helpers will be removed in v1.0.0.
  * @param manager - The AuthManager instance to use globally
  *
  * @example
@@ -27,6 +28,7 @@ export function setAuthManager(manager: AuthManagerInterface): void {
 /**
  * Create a request-scoped AuthContext using the global auth manager.
  *
+ * @deprecated Use `createAuth()` middleware and access auth via `ctx.locals.auth` instead. Global helpers will be removed in v1.0.0.
  * @param input - Request-scoped input for guards
  * @returns A request-scoped auth context
  * @throws If no auth manager has been set
@@ -50,6 +52,7 @@ export function auth(input: GuardInput): AuthContext {
 /**
  * Get the global auth manager instance.
  *
+ * @deprecated Use `createAuth()` middleware for app-scoped integration instead. Global helpers will be removed in v1.0.0.
  * @returns The global auth manager or null if not set
  */
 export function getAuthManager(): AuthManagerInterface | null {
@@ -58,6 +61,8 @@ export function getAuthManager(): AuthManagerInterface | null {
 
 /**
  * Clear the global auth manager (useful for testing).
+ *
+ * @deprecated Use `createAuth()` middleware for app-scoped integration instead. Global helpers will be removed in v1.0.0.
  */
 export function clearAuthManager(): void {
 	globalAuthManager = null;
