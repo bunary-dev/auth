@@ -57,6 +57,8 @@ const user = authCtx.user();
 Creates a new authentication manager instance.
 
 ```ts
+import { createAuthManager } from "@bunary/auth";
+
 const manager = createAuthManager({
   defaultGuard: "jwt",
   guards: { jwt: jwtGuard },
