@@ -41,10 +41,7 @@ describe("AuthManager", () => {
 			const authManager = createAuthManager(createConfig());
 			expect(authManager).toBeDefined();
 			expect(typeof authManager.guard).toBe("function");
-			expect(typeof authManager.authenticate).toBe("function");
-			expect(typeof authManager.user).toBe("function");
-			expect(typeof authManager.check).toBe("function");
-			expect(typeof authManager.logout).toBe("function");
+			expect(typeof authManager.createContext).toBe("function");
 		});
 	});
 
@@ -67,14 +64,15 @@ describe("AuthManager", () => {
 		});
 	});
 
-	describe("authenticate()", () => {
+	describe("AuthContext", () => {
 		test("authenticates valid request with default guard", async () => {
 			const authManager = createAuthManager(createConfig());
 			const request = new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer valid-token" },
 			});
 
-			const user = await authManager.authenticate(request);
+			const ctx = authManager.createContext({ request });
+			const user = await ctx.authenticate();
 			expect(user).toEqual({
 				id: 1,
 				name: "John Doe",
@@ -88,7 +86,8 @@ describe("AuthManager", () => {
 				headers: { Authorization: "Bearer invalid-token" },
 			});
 
-			const user = await authManager.authenticate(request);
+			const ctx = authManager.createContext({ request });
+			const user = await ctx.authenticate();
 			expect(user).toBeNull();
 		});
 
@@ -98,29 +97,32 @@ describe("AuthManager", () => {
 				headers: { "X-API-Key": "test-key" },
 			});
 
-			const user = await authManager.authenticate(request, "api-key");
+			const ctx = authManager.createContext({ request });
+			const user = await ctx.authenticate("api-key");
 			expect(user).toEqual({ id: 2, name: "API User" });
 		});
 
-		test("stores authenticated user for later retrieval", async () => {
+		test("stores authenticated user on the context for later retrieval", async () => {
 			const authManager = createAuthManager(createConfig());
 			const request = new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer valid-token" },
 			});
 
-			await authManager.authenticate(request);
-			expect(authManager.user()).toEqual({
+			const ctx = authManager.createContext({ request });
+			await ctx.authenticate();
+			expect(ctx.user()).toEqual({
 				id: 1,
 				name: "John Doe",
 				email: "john@example.com",
 			});
 		});
-	});
 
-	describe("user()", () => {
 		test("returns null before authentication", () => {
 			const authManager = createAuthManager(createConfig());
-			expect(authManager.user()).toBeNull();
+			const ctx = authManager.createContext({
+				request: new Request("http://localhost/test"),
+			});
+			expect(ctx.user()).toBeNull();
 		});
 
 		test("returns authenticated user after authentication", async () => {
@@ -129,55 +131,108 @@ describe("AuthManager", () => {
 				headers: { Authorization: "Bearer valid-token" },
 			});
 
-			await authManager.authenticate(request);
-			expect(authManager.user()).toEqual({
+			const ctx = authManager.createContext({ request });
+			await ctx.authenticate();
+			expect(ctx.user()).toEqual({
 				id: 1,
 				name: "John Doe",
 				email: "john@example.com",
 			});
 		});
-	});
 
-	describe("check()", () => {
-		test("returns false before authentication", () => {
+		test("check() returns false before authentication", () => {
 			const authManager = createAuthManager(createConfig());
-			expect(authManager.check()).toBe(false);
+			const ctx = authManager.createContext({
+				request: new Request("http://localhost/test"),
+			});
+			expect(ctx.check()).toBe(false);
 		});
 
-		test("returns true after successful authentication", async () => {
+		test("check() returns true after successful authentication", async () => {
 			const authManager = createAuthManager(createConfig());
 			const request = new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer valid-token" },
 			});
 
-			await authManager.authenticate(request);
-			expect(authManager.check()).toBe(true);
+			const ctx = authManager.createContext({ request });
+			await ctx.authenticate();
+			expect(ctx.check()).toBe(true);
 		});
 
-		test("returns false after failed authentication", async () => {
+		test("check() returns false after failed authentication", async () => {
 			const authManager = createAuthManager(createConfig());
 			const request = new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer invalid-token" },
 			});
 
-			await authManager.authenticate(request);
-			expect(authManager.check()).toBe(false);
+			const ctx = authManager.createContext({ request });
+			await ctx.authenticate();
+			expect(ctx.check()).toBe(false);
 		});
-	});
 
-	describe("logout()", () => {
-		test("clears the authenticated user", async () => {
+		test("logout() clears the authenticated user", async () => {
 			const authManager = createAuthManager(createConfig());
 			const request = new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer valid-token" },
 			});
 
-			await authManager.authenticate(request);
-			expect(authManager.check()).toBe(true);
+			const ctx = authManager.createContext({ request });
+			await ctx.authenticate();
+			expect(ctx.check()).toBe(true);
 
-			authManager.logout();
-			expect(authManager.check()).toBe(false);
-			expect(authManager.user()).toBeNull();
+			ctx.logout();
+			expect(ctx.check()).toBe(false);
+			expect(ctx.user()).toBeNull();
+		});
+
+		test("require() throws when unauthenticated", () => {
+			const authManager = createAuthManager(createConfig());
+			const ctx = authManager.createContext({
+				request: new Request("http://localhost/test"),
+			});
+			expect(() => ctx.require()).toThrow("Unauthenticated");
+		});
+
+		test("require() returns the user when authenticated", async () => {
+			const authManager = createAuthManager(createConfig());
+			const ctx = authManager.createContext({
+				request: new Request("http://localhost/test", {
+					headers: { Authorization: "Bearer valid-token" },
+				}),
+			});
+			await ctx.authenticate();
+			expect(ctx.require()).toEqual({
+				id: 1,
+				name: "John Doe",
+				email: "john@example.com",
+			});
+		});
+
+		test("contexts are isolated (no user leakage across concurrent requests)", async () => {
+			const authManager = createAuthManager(createConfig());
+
+			const ctxA = authManager.createContext({
+				request: new Request("http://localhost/test", {
+					headers: { Authorization: "Bearer valid-token" },
+				}),
+			});
+			const ctxB = authManager.createContext({
+				request: new Request("http://localhost/test", {
+					headers: { "X-API-Key": "test-key" },
+				}),
+			});
+
+			await Promise.all([
+				ctxA.authenticate("jwt"),
+				ctxB.authenticate("api-key"),
+			]);
+
+			expect(ctxA.user()).toEqual({
+				id: 1,
+				name: "John Doe",
+				email: "john@example.com",
+			});
+			expect(ctxB.user()).toEqual({ id: 2, name: "API User" });
 		});
 	});
 });
@@ -204,7 +259,8 @@ describe("Guard Interface", () => {
 			headers: { Authorization: "Bearer sync-token" },
 		});
 
-		const user = await authManager.authenticate(request);
+		const ctx = authManager.createContext({ request });
+		const user = await ctx.authenticate();
 		expect(user).toEqual({ id: 3, name: "Sync User" });
 	});
 });

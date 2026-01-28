@@ -27,6 +27,16 @@ const manager = createAuthManager({
     },
   },
 });
+cd ..
+// Per-request usage
+const auth = manager.createContext({
+  request: new Request("http://localhost/profile", {
+    headers: { Authorization: "Bearer anything" },
+  }),
+});
+
+await auth.authenticate();
+const user = auth.user();
 ```
 
 ## Requirements

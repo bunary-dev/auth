@@ -38,17 +38,21 @@ describe("auth() helper", () => {
 
 	describe("auth()", () => {
 		test("throws when no auth manager is set", () => {
-			expect(() => auth()).toThrow();
+			expect(() =>
+				auth({ request: new Request("http://localhost/test") }),
+			).toThrow();
 		});
 
-		test("returns null when not authenticated", () => {
+		test("creates a context (unauthenticated by default)", () => {
 			const authManager = createAuthManager({
 				defaultGuard: "test",
 				guards: { test: mockGuard },
 			});
 			setAuthManager(authManager);
 
-			expect(auth()).toBeNull();
+			const ctx = auth({ request: new Request("http://localhost/test") });
+			expect(ctx.user()).toBeNull();
+			expect(ctx.check()).toBe(false);
 		});
 
 		test("returns user after authentication", async () => {
@@ -61,9 +65,10 @@ describe("auth() helper", () => {
 			const request = new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer valid" },
 			});
-			await authManager.authenticate(request);
+			const ctx = auth({ request });
+			await ctx.authenticate();
 
-			expect(auth()).toEqual({ id: 1, name: "Test User" });
+			expect(ctx.user()).toEqual({ id: 1, name: "Test User" });
 		});
 
 		test("returns null after logout", async () => {
@@ -76,10 +81,11 @@ describe("auth() helper", () => {
 			const request = new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer valid" },
 			});
-			await authManager.authenticate(request);
-			authManager.logout();
+			const ctx = auth({ request });
+			await ctx.authenticate();
+			ctx.logout();
 
-			expect(auth()).toBeNull();
+			expect(ctx.user()).toBeNull();
 		});
 	});
 
