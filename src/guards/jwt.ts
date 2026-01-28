@@ -82,10 +82,14 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 	// Import HMAC key once per guard instance (reused across requests)
 	const encoder = new TextEncoder();
 	// Ensure keyData is a Uint8Array backed by ArrayBuffer (not ArrayBufferLike)
-	const keyData: Uint8Array =
-		typeof options.secret === "string"
-			? encoder.encode(options.secret)
-			: new Uint8Array(options.secret.buffer.slice(options.secret.byteOffset, options.secret.byteOffset + options.secret.byteLength));
+	let keyData: Uint8Array;
+	if (typeof options.secret === "string") {
+		keyData = encoder.encode(options.secret);
+	} else {
+		// Create a new ArrayBuffer-backed Uint8Array by copying the data
+		// This ensures TypeScript sees it as Uint8Array<ArrayBuffer>, not Uint8Array<ArrayBufferLike>
+		keyData = Uint8Array.from(options.secret);
+	}
 	const cryptoKeyPromise = crypto.subtle.importKey(
 		"raw",
 		keyData,
