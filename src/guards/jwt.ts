@@ -79,6 +79,20 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 	const clockTolerance = options.clockToleranceSeconds ?? 0;
 	const now = () => Math.floor(Date.now() / 1000);
 
+	// Import HMAC key once per guard instance (reused across requests)
+	const encoder = new TextEncoder();
+	const keyData =
+		typeof options.secret === "string"
+			? encoder.encode(options.secret)
+			: options.secret;
+	const cryptoKeyPromise = crypto.subtle.importKey(
+		"raw",
+		keyData,
+		{ name: "HMAC", hash: "SHA-256" },
+		false,
+		["verify"],
+	);
+
 	return {
 		name: guardName,
 		async authenticate(request: Request): Promise<AuthUser | null> {
@@ -128,7 +142,7 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			const signatureValid = await verifyHS256(
 				`${encodedHeader}.${encodedPayload}`,
 				encodedSignature,
-				options.secret,
+				cryptoKeyPromise,
 			);
 			if (!signatureValid) {
 				return null;
@@ -214,29 +228,26 @@ function base64UrlDecode(str: string): string {
 
 /**
  * Verify HS256 signature using WebCrypto.
+ *
+ * @param message - The message to verify (header.payload)
+ * @param encodedSignature - Base64url-encoded signature
+ * @param cryptoKeyPromise - Promise resolving to the imported CryptoKey
+ * @returns True if signature is valid, false otherwise
  */
 async function verifyHS256(
 	message: string,
 	encodedSignature: string,
-	secret: string | Uint8Array,
+	cryptoKeyPromise: Promise<CryptoKey>,
 ): Promise<boolean> {
 	try {
 		const encoder = new TextEncoder();
-		const keyData =
-			typeof secret === "string" ? encoder.encode(secret) : secret;
 		const messageData = encoder.encode(message);
 
 		// Decode signature
 		const signature = base64UrlDecodeToUint8Array(encodedSignature);
 
-		// Import key
-		const cryptoKey = await crypto.subtle.importKey(
-			"raw",
-			keyData,
-			{ name: "HMAC", hash: "SHA-256" },
-			false,
-			["verify"],
-		);
+		// Get the imported key (reused across requests)
+		const cryptoKey = await cryptoKeyPromise;
 
 		// Verify signature
 		return await crypto.subtle.verify(
