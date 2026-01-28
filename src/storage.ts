@@ -16,6 +16,9 @@ export type CookieStorageOptions = Readonly<{
 	httpOnly?: boolean;
 	/**
 	 * Marks cookies as Secure. Defaults to `true`.
+	 *
+	 * **Important**: When `secure: true` (default), cookies are only sent over HTTPS.
+	 * For local HTTP development (e.g., `http://localhost`), set `secure: false`.
 	 */
 	secure?: boolean;
 	/**

@@ -120,12 +120,21 @@ For OAuth/session-style flows, `@bunary/auth` provides a tiny `AuthStorage` abst
 ```ts
 import { createCookieStorage } from "@bunary/auth";
 
-const storage = createCookieStorage({ cookiePrefix: "bunary_" });
-const response = new Response("ok");
+// For local HTTP development (http://localhost), set secure: false
+const storage = createCookieStorage({
+  cookiePrefix: "bunary_",
+  secure: false, // Required for http://localhost
+});
 
+// For production HTTPS, use defaults (secure: true)
+const prodStorage = createCookieStorage({ cookiePrefix: "bunary_" });
+
+const response = new Response("ok");
 storage.set(response, "oauth_state", "abc123", { ttlSeconds: 60 });
 storage.clear(response, "oauth_state");
 ```
+
+**Note**: `secure` defaults to `true` (HTTPS-only). For local HTTP development, you **must** set `secure: false` or cookies won't be accepted by browsers.
 
 ## Guard Interface
 
