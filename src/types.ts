@@ -162,3 +162,31 @@ export interface AuthManagerInterface {
 	 */
 	createContext(input: GuardInput): AuthContext;
 }
+
+/**
+ * Minimal storage abstraction for auth workflows (sessions/OAuth).
+ *
+ * The storage implementation is responsible for how values are persisted
+ * (cookies, headers, database, etc.). The interface stays intentionally small.
+ */
+export interface AuthStorage {
+	/**
+	 * Read a value from the request (e.g. from cookies).
+	 */
+	get(request: Request, key: string): Promise<string | null> | string | null;
+
+	/**
+	 * Persist a value by mutating the response (e.g. adding `Set-Cookie`).
+	 */
+	set(
+		response: Response,
+		key: string,
+		value: string,
+		options?: { ttlSeconds?: number },
+	): Promise<void> | void;
+
+	/**
+	 * Clear a stored value by mutating the response.
+	 */
+	clear(response: Response, key: string): Promise<void> | void;
+}

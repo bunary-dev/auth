@@ -113,6 +113,20 @@ await authCtx.authenticate(); // stores user on this context only
 - `require()`
 - `logout()`
 
+## AuthStorage (cookie-first)
+
+For OAuth/session-style flows, `@bunary/auth` provides a tiny `AuthStorage` abstraction and a cookie-backed reference implementation:
+
+```ts
+import { createCookieStorage } from "@bunary/auth";
+
+const storage = createCookieStorage({ cookiePrefix: "bunary_" });
+const response = new Response("ok");
+
+storage.set(response, "oauth_state", "abc123", { ttlSeconds: 60 });
+storage.clear(response, "oauth_state");
+```
+
 ## Guard Interface
 
 Guards are responsible for authenticating requests. Implement the `Guard` interface:

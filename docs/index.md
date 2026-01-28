@@ -27,7 +27,7 @@ const manager = createAuthManager({
     },
   },
 });
-cd ..
+
 // Per-request usage
 const auth = manager.createContext({
   request: new Request("http://localhost/profile", {
@@ -37,6 +37,20 @@ const auth = manager.createContext({
 
 await auth.authenticate();
 const user = auth.user();
+```
+
+## Storage (cookie-first)
+
+For OAuth/session-style flows, `@bunary/auth` provides a small `AuthStorage` abstraction and a cookie-backed reference implementation:
+
+```ts
+import { createCookieStorage } from "@bunary/auth";
+
+const storage = createCookieStorage({ cookiePrefix: "bunary_" });
+const response = new Response("ok");
+
+storage.set(response, "oauth_state", "abc123", { ttlSeconds: 60 });
+storage.clear(response, "oauth_state");
 ```
 
 ## Requirements
