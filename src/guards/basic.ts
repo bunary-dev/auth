@@ -35,7 +35,7 @@ export interface BasicGuardOptions {
  *
  * @example
  * ```ts
- * import { createBasicGuard } from "@bunary/auth";
+ * import { createBasicGuard, createAuthManager } from "@bunary/auth";
  *
  * const basicGuard = createBasicGuard({
  *   name: "admin",
