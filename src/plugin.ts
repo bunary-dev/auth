@@ -1,16 +1,8 @@
 import type {
-	AuthManagerInterface,
 	AuthPlugin,
 	AuthPluginRouter,
-	Guard,
+	InstallableAuthManager,
 } from "./types.js";
-
-/**
- * Internal manager type that includes guards map for plugin installation.
- */
-type AuthManagerWithGuards = AuthManagerInterface & {
-	_guards: Map<string, Guard>;
-};
 
 /**
  * Install an authentication plugin into an auth manager.
@@ -18,9 +10,15 @@ type AuthManagerWithGuards = AuthManagerInterface & {
  * Merges plugin guards (overriding existing guards with the same name),
  * calls the optional routes callback, and calls the optional configure callback.
  *
- * @param manager - The auth manager to install the plugin into
+ * **Note**: This function requires an `InstallableAuthManager` (created by `createAuthManager()`).
+ * Custom `AuthManagerInterface` implementations cannot use plugins unless they also
+ * implement `InstallableAuthManager`.
+ *
+ * @param manager - The auth manager to install the plugin into (must be created by `createAuthManager()`)
  * @param plugin - The plugin to install
  * @param pluginOptions - Optional plugin-specific configuration
+ *
+ * @throws {Error} If the manager doesn't support plugin installation (missing `_guards` property)
  *
  * @example
  * ```ts
@@ -38,16 +36,21 @@ type AuthManagerWithGuards = AuthManagerInterface & {
  * ```
  */
 export function installAuthPlugin(
-	manager: AuthManagerInterface,
+	manager: InstallableAuthManager,
 	plugin: AuthPlugin,
 	pluginOptions?: Record<string, unknown>,
 ): void {
-	const managerWithGuards = manager as AuthManagerWithGuards;
+	// Runtime check: ensure _guards exists (defensive programming)
+	if (!manager._guards || !(manager._guards instanceof Map)) {
+		throw new Error(
+			"Auth manager does not support plugin installation. Use createAuthManager() to create a manager that supports plugins.",
+		);
+	}
 
 	// Merge plugin guards (overrides existing guards with same name)
 	if (plugin.guards) {
 		for (const [name, guard] of Object.entries(plugin.guards)) {
-			managerWithGuards._guards.set(name, guard);
+			manager._guards.set(name, guard);
 		}
 	}
 

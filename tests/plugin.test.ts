@@ -159,4 +159,46 @@ describe("AuthPlugin", () => {
 
 		expect(manager.guard("api").name).toBe("api");
 	});
+
+	test("installAuthPlugin() throws when manager doesn't support plugins", () => {
+		// Custom manager that implements AuthManagerInterface but not InstallableAuthManager
+		const customManager = {
+			guard: () => ({
+				name: "custom",
+				async authenticate() {
+					return null;
+				},
+			}),
+			createContext: () => ({
+				guard: () => ({
+					name: "custom",
+					async authenticate() {
+						return null;
+					},
+				}),
+				authenticate: async () => null,
+				user: () => null,
+				check: () => false,
+				require: () => {
+					throw new Error("Unauthenticated");
+				},
+				logout: () => {},
+			}),
+			// Missing _guards property
+		};
+
+		const plugin: AuthPlugin = {
+			name: "test-plugin",
+			guards: {
+				test: mockGuard,
+			},
+		};
+
+		expect(() => {
+			// @ts-expect-error - Testing runtime error for custom manager without _guards
+			installAuthPlugin(customManager, plugin);
+		}).toThrow(
+			"Auth manager does not support plugin installation. Use createAuthManager() to create a manager that supports plugins.",
+		);
+	});
 });

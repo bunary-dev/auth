@@ -25,13 +25,13 @@
  */
 import type {
 	AuthConfig,
-	AuthManagerInterface,
 	AuthUser,
 	Guard,
 	GuardInput,
+	InstallableAuthManager,
 } from "./types.js";
 
-export function createAuthManager(config: AuthConfig): AuthManagerInterface {
+export function createAuthManager(config: AuthConfig): InstallableAuthManager {
 	// Store guards internally so they can be modified by plugins
 	const guards = new Map<string, Guard>();
 	for (const [name, guard] of Object.entries(config.guards)) {
@@ -96,5 +96,5 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 		},
 		// Internal: expose guards map for plugin installation
 		_guards: guards,
-	} as AuthManagerInterface & { _guards: Map<string, Guard> };
+	};
 }

@@ -40,6 +40,7 @@ export type {
 	GuardInput,
 	AuthContext,
 	AuthManagerInterface,
+	InstallableAuthManager,
 	AuthPlugin,
 	AuthPluginRouter,
 } from "./types.js";

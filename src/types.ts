@@ -164,6 +164,22 @@ export interface AuthManagerInterface {
 }
 
 /**
+ * Auth manager that supports plugin installation.
+ *
+ * This extends `AuthManagerInterface` with an internal guards map
+ * that allows plugins to add/override guards. Managers created by
+ * `createAuthManager()` implement this interface.
+ */
+export interface InstallableAuthManager extends AuthManagerInterface {
+	/**
+	 * Internal guards map for plugin installation.
+	 *
+	 * @internal
+	 */
+	_guards: Map<string, Guard>;
+}
+
+/**
  * Minimal storage abstraction for auth workflows (sessions/OAuth).
  *
  * The storage implementation is responsible for how values are persisted
