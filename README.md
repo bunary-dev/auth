@@ -50,7 +50,78 @@ await authCtx.authenticate(); // uses default guard
 const user = authCtx.user();
 ```
 
+## App-Scoped Integration (Recommended)
+
+For applications using `@bunary/http`, use `createAuth()` to create app-scoped authentication middleware. This avoids global state and allows multiple apps with different auth configs in the same process.
+
+```ts
+import { createApp } from "@bunary/http";
+import { createAuth, createJwtGuard } from "@bunary/auth";
+import type { AuthContext } from "@bunary/auth";
+
+const app = createApp();
+
+// Create app-scoped auth middleware
+const authMiddleware = createAuth({
+  defaultGuard: "jwt",
+  guards: {
+    jwt: createJwtGuard({
+      secret: process.env.JWT_SECRET!,
+      issuer: "my-app",
+      audience: "api"
+    })
+  }
+});
+
+// Use middleware to attach auth context to all requests
+app.use(authMiddleware);
+
+// Access auth in route handlers via ctx.locals.auth
+app.get("/profile", (ctx) => {
+  const auth = ctx.locals.auth as AuthContext;
+  
+  // Authenticate using default guard
+  await auth.authenticate();
+  
+  if (!auth.check()) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  
+  return { user: auth.user() };
+});
+
+app.listen(3000);
+```
+
+**Benefits:**
+- No global singleton required
+- Multiple apps can have different auth configs
+- Auth context is automatically attached to each request
+- Type-safe access via `ctx.locals.auth`
+
 ## API
+
+### `createAuth(config)`
+
+Creates app-scoped authentication middleware for use with `@bunary/http`.
+
+```ts
+import { createAuth, createJwtGuard } from "@bunary/auth";
+
+const authMiddleware = createAuth({
+  defaultGuard: "jwt",
+  guards: {
+    jwt: createJwtGuard({ secret: process.env.JWT_SECRET! })
+  }
+});
+
+app.use(authMiddleware);
+```
+
+The middleware attaches an `AuthContext` to `ctx.locals.auth` for each request, allowing you to access authentication methods in route handlers.
 
 ### `createAuthManager(config)`
 
