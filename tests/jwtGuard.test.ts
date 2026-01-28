@@ -433,12 +433,147 @@ describe("createJwtGuard", () => {
 
 		expect(user).toBeNull();
 	});
+
+	describe("BufferSource compatibility with Uint8Array secrets", () => {
+		test("works with Uint8Array secret backed by ArrayBuffer", async () => {
+			const secretBytes = new TextEncoder().encode("test-secret-key");
+			// Create a new ArrayBuffer-backed Uint8Array
+			const buffer = new ArrayBuffer(secretBytes.length);
+			const secretUint8Array = new Uint8Array(buffer);
+			secretUint8Array.set(secretBytes);
+
+			const guard = createJwtGuard({
+				secret: secretUint8Array,
+			});
+
+			const token = await createTestJwt(
+				{
+					sub: "123",
+					exp: Math.floor(Date.now() / 1000) + 3600,
+				},
+				secretUint8Array,
+			);
+
+			const request = new Request("http://localhost/test", {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			const user = await guard.authenticate(request);
+
+			expect(user).not.toBeNull();
+			expect(user?.id).toBe("123");
+		});
+
+		test("works with Uint8Array secret created from string", async () => {
+			const secretString = "test-secret-key";
+			const secretUint8Array = new TextEncoder().encode(secretString);
+
+			const guard = createJwtGuard({
+				secret: secretUint8Array,
+			});
+
+			const token = await createTestJwt(
+				{
+					sub: "456",
+					exp: Math.floor(Date.now() / 1000) + 3600,
+				},
+				secretUint8Array,
+			);
+
+			const request = new Request("http://localhost/test", {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			const user = await guard.authenticate(request);
+
+			expect(user).not.toBeNull();
+			expect(user?.id).toBe("456");
+		});
+
+		test("rejects token signed with different Uint8Array secret", async () => {
+			const secret1 = new TextEncoder().encode("secret-1");
+			const secret2 = new TextEncoder().encode("secret-2");
+
+			const guard = createJwtGuard({
+				secret: secret1,
+			});
+
+			// Create token with secret2
+			const token = await createTestJwt(
+				{
+					sub: "789",
+					exp: Math.floor(Date.now() / 1000) + 3600,
+				},
+				secret2,
+			);
+
+			const request = new Request("http://localhost/test", {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			const user = await guard.authenticate(request);
+
+			expect(user).toBeNull();
+		});
+
+		test("Uint8Array secret produces same results as string secret", async () => {
+			const secretString = "test-secret-key";
+			const secretUint8Array = new TextEncoder().encode(secretString);
+
+			const stringGuard = createJwtGuard({ secret: secretString });
+			const uint8ArrayGuard = createJwtGuard({ secret: secretUint8Array });
+
+			// Create token with string secret (should work with both guards)
+			const token = await createTestJwt(
+				{
+					sub: "999",
+					exp: Math.floor(Date.now() / 1000) + 3600,
+				},
+				secretString,
+			);
+
+			const request = new Request("http://localhost/test", {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+
+			const stringUser = await stringGuard.authenticate(request);
+			const uint8ArrayUser = await uint8ArrayGuard.authenticate(request);
+
+			expect(stringUser).not.toBeNull();
+			expect(uint8ArrayUser).not.toBeNull();
+			expect(stringUser?.id).toBe(uint8ArrayUser?.id);
+		});
+
+		test("works with Uint8Array secret and custom claims", async () => {
+			const secretUint8Array = new TextEncoder().encode("custom-secret");
+			const guard = createJwtGuard({
+				secret: secretUint8Array,
+				issuer: "test-issuer",
+				audience: "test-audience",
+			});
+
+			const token = await createTestJwt(
+				{
+					sub: "custom-user",
+					iss: "test-issuer",
+					aud: "test-audience",
+					exp: Math.floor(Date.now() / 1000) + 3600,
+				},
+				secretUint8Array,
+			);
+
+			const request = new Request("http://localhost/test", {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			const user = await guard.authenticate(request);
+
+			expect(user).not.toBeNull();
+			expect(user?.id).toBe("custom-user");
+		});
+	});
 });
 
 // Helper function to create a test JWT (HS256)
 async function createTestJwt(
 	payload: Record<string, unknown>,
-	secret: string,
+	secret: string | Uint8Array,
 ): Promise<string> {
 	const header = { alg: "HS256", typ: "JWT" };
 
@@ -467,9 +602,17 @@ function base64UrlEncodeUint8Array(bytes: Uint8Array): string {
 	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
-async function signHS256(message: string, secret: string): Promise<Uint8Array> {
+async function signHS256(message: string, secret: string | Uint8Array): Promise<Uint8Array> {
 	const encoder = new TextEncoder();
-	const keyData = encoder.encode(secret);
+	let keyData: Uint8Array;
+	if (typeof secret === "string") {
+		keyData = encoder.encode(secret);
+	} else {
+		// For Uint8Array secrets, ensure ArrayBuffer backing
+		const buffer = new ArrayBuffer(secret.length);
+		keyData = new Uint8Array(buffer);
+		keyData.set(secret);
+	}
 	const messageData = encoder.encode(message);
 
 	const cryptoKey = await crypto.subtle.importKey(
