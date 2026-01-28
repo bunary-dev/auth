@@ -36,6 +36,7 @@ export type {
 	AuthUser,
 	Guard,
 	AuthConfig,
+	AuthStorage,
 	GuardInput,
 	AuthContext,
 	AuthManagerInterface,
@@ -51,3 +52,6 @@ export {
 	getAuthManager,
 	clearAuthManager,
 } from "./helpers.js";
+
+// Storage
+export { createCookieStorage } from "./storage.js";
