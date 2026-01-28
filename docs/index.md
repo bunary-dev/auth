@@ -80,7 +80,7 @@ const plugin: AuthPlugin = {
   }
 };
 
-const manager = createAuthManager({ defaultGuard: "jwt", guards: {} });
+const manager = createAuthManager({ defaultGuard: "provider", guards: {} });
 installAuthPlugin(manager, plugin);
 ```
 
