@@ -88,7 +88,10 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 	} else {
 		// Create a new ArrayBuffer-backed Uint8Array by copying the data
 		// This ensures TypeScript sees it as Uint8Array<ArrayBuffer>, not Uint8Array<ArrayBufferLike>
-		keyData = Uint8Array.from(options.secret);
+		// Create a new ArrayBuffer and copy the data to ensure ArrayBuffer backing
+		const buffer = new ArrayBuffer(options.secret.length);
+		keyData = new Uint8Array(buffer);
+		keyData.set(options.secret);
 	}
 	const cryptoKeyPromise = crypto.subtle.importKey(
 		"raw",
@@ -255,7 +258,12 @@ async function verifyHS256(
 		const messageData = encoder.encode(message);
 
 		// Decode signature
-		const signature = base64UrlDecodeToUint8Array(encodedSignature);
+		const decodedSignature = base64UrlDecodeToUint8Array(encodedSignature);
+		// Ensure signature is backed by ArrayBuffer (not ArrayBufferLike)
+		// Create a new ArrayBuffer and copy the data to ensure ArrayBuffer backing
+		const signatureBuffer = new ArrayBuffer(decodedSignature.length);
+		const signature = new Uint8Array(signatureBuffer);
+		signature.set(decodedSignature);
 
 		// Get the imported key (reused across requests)
 		const cryptoKey = await cryptoKeyPromise;
