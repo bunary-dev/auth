@@ -77,6 +77,27 @@ const jwtGuard = createJwtGuard({
 const manager = createAuthManager({
   defaultGuard: "jwt",
   guards: { jwt: jwtGuard }
+```
+
+### Basic Auth
+
+For simple username/password authentication:
+
+```ts
+import { createBasicGuard, createAuthManager } from "@bunary/auth";
+
+const basicGuard = createBasicGuard({
+  async verify(username, password) {
+    if (username === "admin" && password === "secret") {
+      return { id: 1, username: "admin" };
+    }
+    return null;
+  }
+});
+
+const manager = createAuthManager({
+  defaultGuard: "basic",
+  guards: { basic: basicGuard }
 });
 ```
 

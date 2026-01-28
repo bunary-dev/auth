@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supports clock tolerance for exp/nbf validation
 - Customizable user mapping via `mapUser` function
 
+- `createBasicGuard()` factory for Basic Authentication (HTTP Basic Auth)
+- Handles malformed headers safely (returns null, never throws)
+- Supports both async and synchronous verify functions
+
 ## [0.0.5] - 2026-01-28
 
 ### Added
