@@ -59,6 +59,30 @@ storage.clear(response, "oauth_state");
 
 **Important**: `secure` defaults to `true` (HTTPS-only). For local HTTP development, you **must** set `secure: false` or cookies won't be accepted by browsers.
 
+## Built-in Guards
+
+### Basic Auth
+
+For simple username/password authentication:
+
+```ts
+import { createBasicGuard, createAuthManager } from "@bunary/auth";
+
+const basicGuard = createBasicGuard({
+  async verify(username, password) {
+    if (username === "admin" && password === "secret") {
+      return { id: 1, username: "admin" };
+    }
+    return null;
+  }
+});
+
+const manager = createAuthManager({
+  defaultGuard: "basic",
+  guards: { basic: basicGuard }
+});
+```
+
 ## Plugins (third-party providers)
 
 Plugins enable third-party auth providers (Google/GitHub/Okta/etc.) to integrate cleanly:
