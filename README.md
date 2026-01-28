@@ -188,7 +188,7 @@ await auth.authenticate("google");
 
 **JWT Bearer Guard:**
 ```typescript
-import { createJwtGuard } from "@bunary/auth";
+import { createJwtGuard, createAuthManager } from "@bunary/auth";
 
 const jwtGuard = createJwtGuard({
   secret: process.env.JWT_SECRET!,
