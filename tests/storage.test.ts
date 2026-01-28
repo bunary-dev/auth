@@ -53,4 +53,28 @@ describe("AuthStorage (cookie-first)", () => {
 		expect(() => storage.get(request, "oauth_state")).not.toThrow();
 		expect(storage.get(request, "oauth_state")).toBe("abc%xyz");
 	});
+
+	test("set() omits Max-Age when ttlSeconds is NaN", () => {
+		const storage = createCookieStorage({ cookiePrefix: "bunary_" });
+		const response = new Response("ok");
+
+		storage.set(response, "oauth_state", "abc123", {
+			ttlSeconds: Number.NaN,
+		});
+		const setCookie = response.headers.get("set-cookie");
+		expect(setCookie).toContain("bunary_oauth_state=");
+		expect(setCookie?.toLowerCase()).not.toContain("max-age");
+	});
+
+	test("set() omits Max-Age when ttlSeconds is Infinity", () => {
+		const storage = createCookieStorage({ cookiePrefix: "bunary_" });
+		const response = new Response("ok");
+
+		storage.set(response, "oauth_state", "abc123", {
+			ttlSeconds: Number.POSITIVE_INFINITY,
+		});
+		const setCookie = response.headers.get("set-cookie");
+		expect(setCookie).toContain("bunary_oauth_state=");
+		expect(setCookie?.toLowerCase()).not.toContain("max-age");
+	});
 });

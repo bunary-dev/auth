@@ -121,7 +121,11 @@ function serializeCookie(
 	parts.push(`Path=${options.path}`);
 
 	if (options.maxAge !== undefined) {
-		parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAge))}`);
+		// Validate maxAge is a finite number before serializing
+		if (Number.isFinite(options.maxAge)) {
+			parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAge))}`);
+		}
+		// Otherwise omit Max-Age (cookie becomes session-scoped)
 	}
 
 	if (options.httpOnly) parts.push("HttpOnly");
