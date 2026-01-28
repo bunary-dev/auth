@@ -136,6 +136,54 @@ storage.clear(response, "oauth_state");
 
 **Note**: `secure` defaults to `true` (HTTPS-only). For local HTTP development, you **must** set `secure: false` or cookies won't be accepted by browsers.
 
+## AuthPlugin (third-party providers)
+
+Plugins allow third-party providers (Google/GitHub/Okta/etc.) to integrate without modifying `@bunary/auth` internals:
+
+```ts
+import { createAuthManager, installAuthPlugin } from "@bunary/auth";
+import type { AuthPlugin } from "@bunary/auth";
+
+const googleAuthPlugin: AuthPlugin = {
+  name: "google",
+  guards: {
+    google: {
+      name: "google",
+      async authenticate(request) {
+        const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+        if (!token) return null;
+        // Validate Google OAuth token
+        return { id: "google-123", email: "user@example.com" };
+      }
+    }
+  },
+  routes: (router) => {
+    // Register OAuth redirect/callback routes
+    // Full integration depends on HTTP package middleware hooks (see auth issue #15)
+    router.get("/auth/google", handleGoogleRedirect);
+    router.get("/auth/google/callback", handleGoogleCallback);
+  },
+  configure: (options) => {
+    // Validate plugin-specific options
+    if (!options.clientId) throw new Error("clientId required");
+  }
+};
+
+const manager = createAuthManager({
+  defaultGuard: "jwt",
+  guards: { jwt: jwtGuard }
+});
+
+installAuthPlugin(manager, googleAuthPlugin, {
+  clientId: "xxx",
+  clientSecret: "yyy"
+});
+
+// Plugin guards are now available
+const auth = manager.createContext({ request });
+await auth.authenticate("google");
+```
+
 ## Guard Interface
 
 Guards are responsible for authenticating requests. Implement the `Guard` interface:

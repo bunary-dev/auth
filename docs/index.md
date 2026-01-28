@@ -59,6 +59,31 @@ storage.clear(response, "oauth_state");
 
 **Important**: `secure` defaults to `true` (HTTPS-only). For local HTTP development, you **must** set `secure: false` or cookies won't be accepted by browsers.
 
+## Plugins (third-party providers)
+
+Plugins enable third-party auth providers (Google/GitHub/Okta/etc.) to integrate cleanly:
+
+```ts
+import { createAuthManager, installAuthPlugin } from "@bunary/auth";
+import type { AuthPlugin } from "@bunary/auth";
+
+const plugin: AuthPlugin = {
+  name: "example-provider",
+  guards: {
+    provider: {
+      name: "provider",
+      async authenticate(request) {
+        // Validate provider token
+        return { id: "1" };
+      }
+    }
+  }
+};
+
+const manager = createAuthManager({ defaultGuard: "provider", guards: {} });
+installAuthPlugin(manager, plugin);
+```
+
 ## Requirements
 
 - Bun ≥ 1.0.0
