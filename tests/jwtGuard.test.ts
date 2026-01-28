@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createJwtGuard } from "../src/guards/jwt.js";
 
-// Helper to create a test JWT (we'll need to implement JWT encoding/decoding)
-// For now, we'll test the guard's behavior with mock tokens
-
 describe("createJwtGuard", () => {
 	const secret = "test-secret-key";
 
