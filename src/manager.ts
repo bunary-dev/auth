@@ -28,11 +28,10 @@ import type {
 	AuthManagerInterface,
 	AuthUser,
 	Guard,
+	GuardInput,
 } from "./types.js";
 
 export function createAuthManager(config: AuthConfig): AuthManagerInterface {
-	let currentUser: AuthUser | null = null;
-
 	return {
 		/**
 		 * Get a guard by name.
@@ -53,45 +52,39 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 		},
 
 		/**
-		 * Authenticate a request using the specified or default guard.
+		 * Create a request-scoped auth context.
 		 *
-		 * @param request - The incoming HTTP request
-		 * @param guardName - Optional guard name to use
-		 * @returns The authenticated user or null
+		 * The returned object holds per-request state (current user) and is safe
+		 * to use concurrently across multiple requests.
 		 */
-		async authenticate(
-			request: Request,
-			guardName?: string,
-		): Promise<AuthUser | null> {
-			const guard = this.guard(guardName);
-			const user = await guard.authenticate(request);
-			currentUser = user;
-			return user;
-		},
+		createContext(input: GuardInput) {
+			let currentUser: AuthUser | null = null;
 
-		/**
-		 * Get the currently authenticated user.
-		 *
-		 * @returns The authenticated user or null
-		 */
-		user(): AuthUser | null {
-			return currentUser;
-		},
+			return {
+				guard: (name?: string) => this.guard(name),
 
-		/**
-		 * Check if a user is currently authenticated.
-		 *
-		 * @returns true if authenticated, false otherwise
-		 */
-		check(): boolean {
-			return currentUser !== null;
-		},
+				authenticate: async (guardName?: string): Promise<AuthUser | null> => {
+					const guard = this.guard(guardName);
+					const user = await guard.authenticate(input.request);
+					currentUser = user;
+					return user;
+				},
 
-		/**
-		 * Clear the current authentication state.
-		 */
-		logout(): void {
-			currentUser = null;
+				user: (): AuthUser | null => currentUser,
+
+				check: (): boolean => currentUser !== null,
+
+				require: (): AuthUser => {
+					if (!currentUser) {
+						throw new Error("Unauthenticated");
+					}
+					return currentUser;
+				},
+
+				logout: (): void => {
+					currentUser = null;
+				},
+			};
 		},
 	};
 }

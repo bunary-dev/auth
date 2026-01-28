@@ -1,7 +1,7 @@
 /**
  * Global auth helper functions for accessing authentication state.
  */
-import type { AuthManagerInterface, AuthUser } from "./types.js";
+import type { AuthContext, AuthManagerInterface, GuardInput } from "./types.js";
 
 let globalAuthManager: AuthManagerInterface | null = null;
 
@@ -25,29 +25,26 @@ export function setAuthManager(manager: AuthManagerInterface): void {
 }
 
 /**
- * Get the current authenticated user from the global auth manager.
+ * Create a request-scoped AuthContext using the global auth manager.
  *
- * @returns The authenticated user or null if not authenticated
+ * @param input - Request-scoped input for guards
+ * @returns A request-scoped auth context
  * @throws If no auth manager has been set
  *
  * @example
  * ```ts
- * app.get("/profile", () => {
- *   const user = auth();
- *   if (!user) {
- *     return new Response("Unauthorized", { status: 401 });
- *   }
- *   return { user };
- * });
+ * const ctx = auth({ request });
+ * await ctx.authenticate();
+ * return ctx.user();
  * ```
  */
-export function auth(): AuthUser | null {
+export function auth(input: GuardInput): AuthContext {
 	if (!globalAuthManager) {
 		throw new Error(
 			"Auth manager not initialized. Call setAuthManager() before using auth().",
 		);
 	}
-	return globalAuthManager.user();
+	return globalAuthManager.createContext(input);
 }
 
 /**

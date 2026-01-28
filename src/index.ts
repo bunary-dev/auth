@@ -25,7 +25,9 @@
  * setAuthManager(authManager);
  *
  * // In a route handler
- * const user = auth();
+ * const ctx = auth({ request });
+ * await ctx.authenticate();
+ * const user = ctx.user();
  * ```
  */
 
@@ -34,6 +36,8 @@ export type {
 	AuthUser,
 	Guard,
 	AuthConfig,
+	GuardInput,
+	AuthContext,
 	AuthManagerInterface,
 } from "./types.js";
 

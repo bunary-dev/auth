@@ -76,6 +76,57 @@ export interface AuthConfig {
 }
 
 /**
+ * Input passed to guards/auth contexts.
+ *
+ * Keep this minimal and explicit for MVP. Additional request-scoped fields
+ * (like params/query) can be added later without introducing global state.
+ */
+export interface GuardInput {
+	/** The incoming HTTP request */
+	request: Request;
+}
+
+/**
+ * Request-scoped authentication context.
+ *
+ * This holds **per-request** authentication state (the current user),
+ * and provides explicit methods for authentication.
+ */
+export interface AuthContext {
+	/**
+	 * Get a guard by name (or the default guard).
+	 */
+	guard(name?: string): Guard;
+
+	/**
+	 * Authenticate the request using the specified or default guard.
+	 *
+	 * Stores the user on this context (not globally).
+	 */
+	authenticate(guardName?: string): Promise<AuthUser | null>;
+
+	/**
+	 * Get the currently authenticated user for this request.
+	 */
+	user(): AuthUser | null;
+
+	/**
+	 * Returns true if the request is authenticated.
+	 */
+	check(): boolean;
+
+	/**
+	 * Get the authenticated user or throw.
+	 */
+	require(): AuthUser;
+
+	/**
+	 * Clear authentication state for this request.
+	 */
+	logout(): void;
+}
+
+/**
  * The AuthManager interface for managing authentication state.
  *
  * @example
@@ -86,9 +137,10 @@ export interface AuthConfig {
  * });
  *
  * // In a request handler
- * await authManager.authenticate(request);
- * if (authManager.check()) {
- *   const user = authManager.user();
+ * const auth = authManager.createContext({ request });
+ * await auth.authenticate();
+ * if (auth.check()) {
+ *   const user = auth.user();
  * }
  * ```
  */
@@ -103,30 +155,10 @@ export interface AuthManagerInterface {
 	guard(name?: string): Guard;
 
 	/**
-	 * Authenticate a request using the specified or default guard.
+	 * Create a request-scoped AuthContext.
 	 *
-	 * @param request - The incoming HTTP request
-	 * @param guardName - Optional guard name to use
-	 * @returns The authenticated user or null
+	 * @param input - Request-scoped input for guards
+	 * @returns A request-scoped auth context (isolated per request)
 	 */
-	authenticate(request: Request, guardName?: string): Promise<AuthUser | null>;
-
-	/**
-	 * Get the currently authenticated user.
-	 *
-	 * @returns The authenticated user or null
-	 */
-	user(): AuthUser | null;
-
-	/**
-	 * Check if a user is currently authenticated.
-	 *
-	 * @returns true if authenticated, false otherwise
-	 */
-	check(): boolean;
-
-	/**
-	 * Clear the current authentication state.
-	 */
-	logout(): void;
+	createContext(input: GuardInput): AuthContext;
 }

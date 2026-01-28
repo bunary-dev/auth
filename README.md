@@ -14,9 +14,9 @@ bun add @bunary/auth
 
 ## Quick Start
 
-```typescript
+```ts
 import { createAuthManager, setAuthManager, auth } from "@bunary/auth";
-import type { Guard, AuthUser } from "@bunary/auth";
+import type { Guard } from "@bunary/auth";
 
 // Define a JWT guard
 const jwtGuard: Guard = {
@@ -31,16 +31,23 @@ const jwtGuard: Guard = {
   }
 };
 
-// Create and register the auth manager
-const authManager = createAuthManager({
+// Create the auth manager (stateless) with your guards
+const manager = createAuthManager({
   defaultGuard: "jwt",
-  guards: [jwtGuard]
+  guards: { jwt: jwtGuard }
 });
 
-setAuthManager(authManager);
+// Optional: set a global manager to use the `auth({ request })` helper
+setAuthManager(manager);
 
 // Use in your application
-const user = await auth();
+const request = new Request("http://localhost/profile", {
+  headers: { Authorization: "Bearer my-token" },
+});
+
+const authCtx = auth({ request });
+await authCtx.authenticate(); // uses default guard
+const user = authCtx.user();
 ```
 
 ## API
@@ -49,16 +56,16 @@ const user = await auth();
 
 Creates a new authentication manager instance.
 
-```typescript
+```ts
 const manager = createAuthManager({
   defaultGuard: "jwt",
-  guards: [jwtGuard, sessionGuard]
+  guards: { jwt: jwtGuard },
 });
 ```
 
 **Config Options:**
 - `defaultGuard` - Name of the default guard to use
-- `guards` - Array of guard implementations
+- `guards` - Record of guard implementations (keyed by guard name)
 
 ### `setAuthManager(manager)`
 
@@ -68,18 +75,17 @@ Sets the global authentication manager instance.
 setAuthManager(manager);
 ```
 
-### `auth()`
+### `auth({ request })`
 
-Returns the currently authenticated user, or `null` if not authenticated.
+Creates a **request-scoped** auth context (requires `setAuthManager()` first).
 
-```typescript
-const user = auth();
-if (user) {
-  console.log(`Hello, ${user.name}`);
-}
+```ts
+const authCtx = auth({ request });
+await authCtx.authenticate();
+const user = authCtx.user();
 ```
 
-### AuthManager Methods
+### AuthManager methods
 
 #### `guard(name?)`
 
@@ -90,40 +96,22 @@ const jwt = manager.guard("jwt");
 const defaultGuard = manager.guard();
 ```
 
-#### `authenticate(request, guardName?)`
+#### `createContext({ request })`
 
-Authenticate a request using the specified guard (or default).
+Create a request-scoped auth context (safe under concurrency):
 
-```typescript
-const user = await manager.authenticate(request);
-const user = await manager.authenticate(request, "session");
+```ts
+const authCtx = manager.createContext({ request });
+await authCtx.authenticate(); // stores user on this context only
 ```
 
-#### `user()`
+### AuthContext methods
 
-Get the currently authenticated user.
-
-```typescript
-const user = manager.user();
-```
-
-#### `check()`
-
-Check if a user is authenticated.
-
-```typescript
-if (manager.check()) {
-  // User is authenticated
-}
-```
-
-#### `logout()`
-
-Clear the authenticated user.
-
-```typescript
-manager.logout();
-```
+- `authenticate(guardName?)`
+- `user()`
+- `check()`
+- `require()`
+- `logout()`
 
 ## Guard Interface
 
@@ -186,7 +174,7 @@ interface Guard {
 
 interface AuthConfig {
   defaultGuard: string;
-  guards: Guard[];
+  guards: Record<string, Guard>;
 }
 ```
 
