@@ -199,7 +199,7 @@ interface Guard {
 
 **Basic Auth Guard:**
 ```typescript
-import { createBasicGuard } from "@bunary/auth";
+import { createBasicGuard, createAuthManager } from "@bunary/auth";
 
 const basicGuard = createBasicGuard({
   name: "admin",
