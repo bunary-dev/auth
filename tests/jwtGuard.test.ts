@@ -76,8 +76,12 @@ describe("createJwtGuard", () => {
 			secret,
 		});
 
+		// Create a 3-part token with invalid base64url in the header
+		// This ensures we hit the base64/JSON decoding branch, not the parts.length check
 		const request = new Request("http://localhost/test", {
-			headers: { Authorization: "Bearer invalid.base64!!!" },
+			headers: {
+				Authorization: "Bearer invalid.base64!!!.signature",
+			},
 		});
 		const user = await guard.authenticate(request);
 
