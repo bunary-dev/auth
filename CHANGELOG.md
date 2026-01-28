@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supports multiple apps with different auth configurations in the same process
 - No global singleton required - fully app-scoped integration
 
+### Deprecated
+
+- Global helper functions (`setAuthManager()`, `auth()`, `getAuthManager()`, `clearAuthManager()`) are now deprecated
+- Use `createAuth()` middleware and access auth via `ctx.locals.auth` instead
+- Global helpers will be removed in v1.0.0
+
 ## [0.0.6] - 2026-01-28
 
 ### Added
