@@ -59,5 +59,9 @@ export {
 // Storage
 export { createCookieStorage } from "./storage.js";
 
+// Guards
+export { createJwtGuard } from "./guards/jwt.js";
+export type { JwtGuardOptions } from "./guards/jwt.js";
+
 // Plugins
 export { installAuthPlugin } from "./plugin.js";

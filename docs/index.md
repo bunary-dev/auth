@@ -59,6 +59,27 @@ storage.clear(response, "oauth_state");
 
 **Important**: `secure` defaults to `true` (HTTPS-only). For local HTTP development, you **must** set `secure: false` or cookies won't be accepted by browsers.
 
+## Built-in Guards
+
+### JWT Bearer
+
+For JWT token authentication (HS256):
+
+```ts
+import { createJwtGuard, createAuthManager } from "@bunary/auth";
+
+const jwtGuard = createJwtGuard({
+  secret: process.env.JWT_SECRET!,
+  issuer: "my-app",
+  audience: "api",
+});
+
+const manager = createAuthManager({
+  defaultGuard: "jwt",
+  guards: { jwt: jwtGuard }
+});
+```
+
 ## Plugins (third-party providers)
 
 Plugins enable third-party auth providers (Google/GitHub/Okta/etc.) to integrate cleanly:
