@@ -2,6 +2,10 @@
 
 Authentication and authorization module for the Bunary framework. Provides a flexible guard-based authentication system.
 
+## Documentation
+
+Canonical documentation for this package lives in [`docs/index.md`](./docs/index.md).
+
 ## Installation
 
 ```bash
