@@ -384,6 +384,54 @@ describe("createJwtGuard", () => {
 		expect(user?.emoji).toBe("🚀");
 		expect(user?.chinese).toBe("你好");
 	});
+
+	test("default mapping uses sub as id even if payload contains id field", async () => {
+		const guard = createJwtGuard({
+			secret,
+		});
+
+		// Payload has both sub and id - id should be derived from sub
+		const token = await createTestJwt(
+			{
+				sub: "123",
+				id: "wrong-id",
+				name: "Test User",
+				exp: Math.floor(Date.now() / 1000) + 3600,
+			},
+			secret,
+		);
+
+		const request = new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		const user = await guard.authenticate(request);
+
+		expect(user).not.toBeNull();
+		expect(user?.id).toBe("123"); // Should use sub, not payload.id
+		expect(user?.name).toBe("Test User");
+	});
+
+	test("returns null when sub is not a string or number", async () => {
+		const guard = createJwtGuard({
+			secret,
+		});
+
+		// Payload has sub as an object (invalid)
+		const token = await createTestJwt(
+			{
+				sub: { invalid: true },
+				exp: Math.floor(Date.now() / 1000) + 3600,
+			},
+			secret,
+		);
+
+		const request = new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		const user = await guard.authenticate(request);
+
+		expect(user).toBeNull();
+	});
 });
 
 // Helper function to create a test JWT (HS256)

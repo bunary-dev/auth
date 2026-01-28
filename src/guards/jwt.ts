@@ -203,10 +203,16 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			}
 
 			// Default mapping: use sub as id, spread rest of payload
+			// Spread payload first, then set id last to ensure sub always wins
 			if (payload.sub !== undefined) {
+				const sub = payload.sub;
+				// Validate sub is a string or number
+				if (typeof sub !== "string" && typeof sub !== "number") {
+					return null;
+				}
 				return {
-					id: payload.sub as string | number,
 					...payload,
+					id: sub,
 				} as AuthUser;
 			}
 
