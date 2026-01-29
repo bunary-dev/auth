@@ -21,8 +21,8 @@ const jwtGuard: Guard = {
     const token = request.headers.get("Authorization")?.replace("Bearer ", "");
     if (!token) return null;
 
-    // Validate token and return user
-    const user = await validateToken(token);
+    // Your token validation logic here (e.g. verify JWT, decode, return user or null)
+    const user = null; // replace with your verifyToken(token) or similar
     return user;
   }
 };
@@ -73,7 +73,7 @@ const authMiddleware = createAuth({
 app.use(authMiddleware);
 
 // Access auth in route handlers via ctx.locals.auth
-app.get("/profile", (ctx) => {
+app.get("/profile", async (ctx) => {
   const auth = ctx.locals.auth as AuthContext;
 
   // Authenticate using default guard
@@ -89,7 +89,7 @@ app.get("/profile", (ctx) => {
   return { user: auth.user() };
 });
 
-app.listen(3000);
+app.listen({ port: 3000 });
 ```
 
 Benefits: no global singleton, multiple apps can have different auth configs, auth context is attached per request, type-safe access via `ctx.locals.auth`.

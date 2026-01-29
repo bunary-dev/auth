@@ -1,6 +1,6 @@
 # @bunary/auth
 
-Authentication and authorization for the Bunary framework. Guard-based: createAuth (app-scoped with @bunary/http), createAuthManager, built-in JWT and Basic guards, AuthStorage for cookies, AuthPlugin for third-party providers. Full reference: [docs/index.md](./docs/index.md).
+Authentication and authorization for the Bunary framework. Provides a guard-based authentication system with createAuth for app-scoped integration with @bunary/http, createAuthManager for standalone use, built-in JWT and Basic guards, AuthStorage for cookie management, and AuthPlugin support for third-party providers. See full reference: [docs/index.md](./docs/index.md).
 
 ## Installation
 
@@ -8,7 +8,7 @@ Authentication and authorization for the Bunary framework. Guard-based: createAu
 bun add @bunary/auth
 ```
 
-## Quick start
+## Quick Start
 
 ```ts
 import { createAuth, createJwtGuard } from "@bunary/auth";
