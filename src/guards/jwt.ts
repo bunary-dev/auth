@@ -128,6 +128,9 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			}
 
 			const [encodedHeader, encodedPayload, encodedSignature] = parts;
+			if (!encodedHeader || !encodedPayload || !encodedSignature) {
+				return null;
+			}
 
 			// Decode header and payload
 			let header: Record<string, unknown>;

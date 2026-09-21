@@ -2,6 +2,8 @@
 
 Authentication and authorization for the Bunary framework. Provides a guard-based authentication system with createAuth for app-scoped integration with @bunary/http, createAuthManager for standalone use, built-in JWT and Basic guards, AuthStorage for cookie management, and AuthPlugin support for third-party providers. See full reference: [docs/index.md](./docs/index.md).
 
+Requires Bun ≥ 1.4.0.
+
 ## Installation
 
 ```bash

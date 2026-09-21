@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-21
+
+### Changed
+
+- **Requires Bun ≥ 1.4.0** (`engines.bun`); `.bun-version` pins 1.4.2 for CI and contributors (#49)
+- Toolchain: `@types/bun` `^1.4.2`, `typescript` `^7.0.2` and `@biomejs/biome` `2.5.1` pinned as devDependencies; `bun.lock` committed (#49)
+- `tsconfig.json` aligned with Bun 1.4 `bun init` defaults (`module: Preserve`, `moduleDetection: force`, `verbatimModuleSyntax`, `noUncheckedIndexedAccess`, `noImplicitOverride`) (#49)
+- CI: Bun version read from `.bun-version`, plus a non-required `bun latest` canary job; new `build` job verifies the publish tarball with `bun pm pack --dry-run`; `actions/checkout@v7` (#49)
+- Coverage thresholds (80% lines / 30% functions, set below the package's lowest-covered file, `src/plugin.ts`) enforced via `bunfig.toml` (#49)
+
+### Fixed
+
+- `exports["."]` now lists `types` before `import` so TypeScript resolves the declarations; added `default` condition and `./package.json` subpath (#49, absorbs #46 item 1)
+- Added `publishConfig.access: public` and `sideEffects: false` (#49)
+- Added missing `LICENSE` file (MIT) to the repo and the published tarball (#49)
+
 ## [0.1.0] - 2026-01-31
 
 ### Added
