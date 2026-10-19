@@ -135,7 +135,7 @@ Plugins let third-party providers (Google/GitHub/Okta/etc.) integrate without mo
 
 ## Built-in Guards
 
-**JWT Bearer:** `createJwtGuard({ secret, issuer?, audience?, mapUser? })`. HS256 verification.
+**JWT Bearer:** `createJwtGuard({ secret, issuer?, audience?, clockToleranceSeconds?, requireExp?, mapUser? })`. HS256 verification. An empty `secret` throws at construction. `requireExp` (default `true`) rejects validly signed tokens that have no `exp` claim; set `requireExp: false` to allow non-expiring tokens.
 
 **Basic Auth:** `createBasicGuard({ name?, verify(username, password, request) })`. Use with `createAuthManager` or `createAuth`.
 
