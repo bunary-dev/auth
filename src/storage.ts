@@ -41,6 +41,8 @@ export function createCookieStorage(
 ): AuthStorage {
 	const prefix = options.cookiePrefix ?? "bunary_";
 	const path = options.path ?? "/";
+	if (prefix !== "") assertValidCookieName(prefix);
+	assertValidCookiePath(path);
 	const httpOnly = options.httpOnly ?? true;
 	let secure = options.secure ?? true;
 	const sameSite = options.sameSite ?? "lax";
@@ -52,8 +54,10 @@ export function createCookieStorage(
 
 	return {
 		get(request: Request, key: string): string | null {
+			const name = `${prefix}${key}`;
+			assertValidCookieName(name);
 			const cookies = parseCookieHeader(request.headers.get("cookie"));
-			return cookies.get(`${prefix}${key}`) ?? null;
+			return cookies.get(name) ?? null;
 		},
 
 		set(
@@ -63,6 +67,7 @@ export function createCookieStorage(
 			opts?: { ttlSeconds?: number },
 		): void {
 			const name = `${prefix}${key}`;
+			assertValidCookieName(name);
 			const maxAge = opts?.ttlSeconds;
 			const cookie = serializeCookie(name, value, {
 				path,
@@ -76,6 +81,7 @@ export function createCookieStorage(
 
 		clear(response: Response, key: string): void {
 			const name = `${prefix}${key}`;
+			assertValidCookieName(name);
 			const cookie = serializeCookie(name, "", {
 				path,
 				httpOnly,
@@ -96,6 +102,23 @@ type CookieSerializeOptions = Readonly<{
 	maxAge?: number;
 }>;
 
+// RFC 6265 / RFC 2616 token: visible ASCII excluding separators
+const COOKIE_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function assertValidCookieName(name: string): void {
+	if (!COOKIE_NAME_RE.test(name)) {
+		throw new Error(`Invalid cookie name: ${JSON.stringify(name)}`);
+	}
+}
+
+function assertValidCookiePath(path: string): void {
+	// Exclude ';' and control characters (0x00-0x1F, 0x7F)
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional CTL check
+	if (path === "" || /[;\x00-\x1f\x7f]/.test(path)) {
+		throw new Error(`Invalid cookie path: ${JSON.stringify(path)}`);
+	}
+}
+
 function parseCookieHeader(header: string | null): Map<string, string> {
 	const map = new Map<string, string>();
 	if (!header) return map;
@@ -107,8 +130,11 @@ function parseCookieHeader(header: string | null): Map<string, string> {
 		const idx = trimmed.indexOf("=");
 		if (idx === -1) continue;
 		const name = trimmed.slice(0, idx).trim();
-		const value = trimmed.slice(idx + 1).trim();
+		let value = trimmed.slice(idx + 1).trim();
 		if (!name) continue;
+		if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+			value = value.slice(1, -1);
+		}
 		// Guard against invalid percent-encoding (e.g. stray %)
 		let decoded: string;
 		try {
