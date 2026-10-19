@@ -434,6 +434,43 @@ describe("createJwtGuard", () => {
 		expect(user).toBeNull();
 	});
 
+	describe("non-object header/payload JSON", () => {
+		const values = ["null", "[]", '["a"]', "123", '"str"', "true"];
+
+		const signedToken = async (rawHeader: string, rawPayload: string) => {
+			const h = base64UrlEncode(rawHeader);
+			const p = base64UrlEncode(rawPayload);
+			const sig = base64UrlEncodeUint8Array(
+				await signHS256(`${h}.${p}`, secret),
+			);
+			return `${h}.${p}.${sig}`;
+		};
+
+		const run = async (token: string) => {
+			const guard = createJwtGuard({ secret });
+			return guard.authenticate(
+				new Request("http://localhost/test", {
+					headers: { Authorization: `Bearer ${token}` },
+				}),
+			);
+		};
+
+		for (const value of values) {
+			test(`returns null when header is ${value}`, async () => {
+				const token = await signedToken(value, JSON.stringify({ sub: "1" }));
+				expect(await run(token)).toBeNull();
+			});
+
+			test(`returns null when signed payload is ${value}`, async () => {
+				const token = await signedToken(
+					JSON.stringify({ alg: "HS256", typ: "JWT" }),
+					value,
+				);
+				expect(await run(token)).toBeNull();
+			});
+		}
+	});
+
 	describe("BufferSource compatibility with Uint8Array secrets", () => {
 		test("works with Uint8Array secret backed by ArrayBuffer", async () => {
 			const secretBytes = new TextEncoder().encode("test-secret-key");
