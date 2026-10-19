@@ -607,6 +607,46 @@ describe("createJwtGuard", () => {
 	});
 });
 
+describe("createJwtGuard requireExp and secret validation", () => {
+	const secret = "test-secret-key";
+	const bearer = (token: string) =>
+		new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+
+	test("rejects tokens without exp by default", async () => {
+		const guard = createJwtGuard({ secret });
+		const token = await createTestJwt({ sub: "123" }, secret);
+		expect(await guard.authenticate(bearer(token))).toBeNull();
+	});
+
+	test("accepts tokens without exp when requireExp is false", async () => {
+		const guard = createJwtGuard({ secret, requireExp: false });
+		const token = await createTestJwt({ sub: "123" }, secret);
+		const user = await guard.authenticate(bearer(token));
+		expect(user?.id).toBe("123");
+	});
+
+	test("accepts tokens with valid exp when requireExp is true", async () => {
+		const guard = createJwtGuard({ secret, requireExp: true });
+		const token = await createTestJwt(
+			{ sub: "123", exp: Math.floor(Date.now() / 1000) + 3600 },
+			secret,
+		);
+		expect(await guard.authenticate(bearer(token))).not.toBeNull();
+	});
+
+	test("throws for an empty string secret", () => {
+		expect(() => createJwtGuard({ secret: "" })).toThrow(/secret/i);
+	});
+
+	test("throws for an empty Uint8Array secret", () => {
+		expect(() => createJwtGuard({ secret: new Uint8Array(0) })).toThrow(
+			/secret/i,
+		);
+	});
+});
+
 // Helper function to create a test JWT (HS256)
 async function createTestJwt(
 	payload: Record<string, unknown>,
