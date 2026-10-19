@@ -75,7 +75,41 @@ describe("AuthPlugin", () => {
 		expect(user).toEqual({ id: 1, name: "Overridden" });
 	});
 
-	test("installAuthPlugin() calls routes callback when provided", () => {
+	test("installAuthPlugin() passes the provided router to plugin.routes", () => {
+		const manager = createAuthManager({
+			defaultGuard: "jwt",
+			guards: {
+				jwt: {
+					name: "jwt",
+					async authenticate() {
+						return null;
+					},
+				},
+			},
+		});
+
+		const registered: string[] = [];
+		const router = {
+			get: (path: string) => {
+				registered.push(`GET ${path}`);
+			},
+			post: (path: string) => {
+				registered.push(`POST ${path}`);
+			},
+		};
+		const plugin: AuthPlugin = {
+			name: "routes-plugin",
+			routes: (r) => {
+				r.get("/auth/callback", () => new Response("ok"));
+				r.post("/auth/login", () => new Response("ok"));
+			},
+		};
+
+		installAuthPlugin(manager, plugin, undefined, router);
+		expect(registered).toEqual(["GET /auth/callback", "POST /auth/login"]);
+	});
+
+	test("installAuthPlugin() throws when plugin.routes is set but no router is provided", () => {
 		const manager = createAuthManager({
 			defaultGuard: "jwt",
 			guards: {
@@ -91,14 +125,13 @@ describe("AuthPlugin", () => {
 		let routesCalled = false;
 		const plugin: AuthPlugin = {
 			name: "routes-plugin",
-			routes: (router) => {
+			routes: () => {
 				routesCalled = true;
-				expect(typeof router).toBe("object");
 			},
 		};
 
-		installAuthPlugin(manager, plugin);
-		expect(routesCalled).toBe(true);
+		expect(() => installAuthPlugin(manager, plugin)).toThrow(/routes-plugin/);
+		expect(routesCalled).toBe(false);
 	});
 
 	test("installAuthPlugin() calls configure callback when provided (with options)", () => {
