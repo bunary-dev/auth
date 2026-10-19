@@ -93,4 +93,41 @@ describe("AuthStorage (cookie-first)", () => {
 		expect(setCookie?.toLowerCase()).toContain("samesite=none");
 		expect(setCookie?.toLowerCase()).toContain("secure");
 	});
+
+	test("rejects cookie names with invalid characters", () => {
+		const storage = createCookieStorage();
+		const response = new Response("ok");
+		for (const key of ["a;b", "a=b", "a\r\nSet-Cookie: x=y", "a b", "a,b"]) {
+			expect(() => storage.set(response, key, "v")).toThrow();
+			expect(() => storage.clear(response, key)).toThrow();
+			expect(() =>
+				storage.get(new Request("http://localhost/"), key),
+			).toThrow();
+		}
+		expect(response.headers.get("set-cookie")).toBeNull();
+	});
+
+	test("rejects invalid cookiePrefix", () => {
+		expect(() =>
+			createCookieStorage({ cookiePrefix: "x; Domain=evil.com;" }),
+		).toThrow();
+		expect(() => createCookieStorage({ cookiePrefix: "a\nb" })).toThrow();
+	});
+
+	test("rejects invalid path", () => {
+		for (const path of ["/; Domain=evil.com", "/\r\nX: y", "/\x00", "/\x7f"]) {
+			expect(() => createCookieStorage({ path })).toThrow();
+		}
+		expect(() => createCookieStorage({ path: "/app/sub" })).not.toThrow();
+	});
+
+	test("get() unquotes quoted cookie values", () => {
+		const storage = createCookieStorage();
+		const request = new Request("http://localhost/", {
+			headers: { cookie: 'bunary_a="hello"; bunary_b="x%20y"; bunary_c=""' },
+		});
+		expect(storage.get(request, "a")).toBe("hello");
+		expect(storage.get(request, "b")).toBe("x y");
+		expect(storage.get(request, "c")).toBe("");
+	});
 });
