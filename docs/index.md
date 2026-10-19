@@ -131,11 +131,13 @@ For OAuth/session-style flows, `createCookieStorage` provides a cookie-backed re
 
 ## AuthPlugin (third-party providers)
 
-Plugins let third-party providers (Google/GitHub/Okta/etc.) integrate without modifying `@bunary/auth` internals. Implement `AuthPlugin` with `name`, `guards`, optional `routes` and `configure`, then call `installAuthPlugin(manager, plugin, options)`.
+Plugins let third-party providers (Google/GitHub/Okta/etc.) integrate without modifying `@bunary/auth` internals. Implement `AuthPlugin` with `name`, `guards`, optional `routes` and `configure`, then call `installAuthPlugin(manager, plugin, options, router?)`.
+
+If a plugin defines `routes` (e.g. OAuth callbacks), you must pass a router (an object with `get(path, handler)` and `post(path, handler)`) as the fourth argument; `plugin.routes` is called with it. If no router is provided, `installAuthPlugin` throws rather than silently dropping the routes. Plugins without `routes` need no router.
 
 ## Built-in Guards
 
-**JWT Bearer:** `createJwtGuard({ secret, issuer?, audience?, mapUser? })`. HS256 verification.
+**JWT Bearer:** `createJwtGuard({ secret, issuer?, audience?, clockToleranceSeconds?, requireExp?, mapUser? })`. HS256 verification. An empty `secret` throws at construction. `requireExp` (default `true`) rejects validly signed tokens that have no `exp` claim; set `requireExp: false` to allow non-expiring tokens.
 
 **Basic Auth:** `createBasicGuard({ name?, verify(username, password, request) })`. Use with `createAuthManager` or `createAuth`.
 

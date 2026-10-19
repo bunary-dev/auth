@@ -35,6 +35,13 @@ export interface JwtGuardOptions {
 	clockToleranceSeconds?: number;
 
 	/**
+	 * Require tokens to carry an `exp` claim; tokens without one are rejected.
+	 * Defaults to true, so a validly signed token can't be accepted forever.
+	 * Set to false only if you deliberately issue non-expiring tokens.
+	 */
+	requireExp?: boolean;
+
+	/**
 	 * Function to map JWT payload to AuthUser.
 	 * Defaults to `{ id: payload.sub, ...payload }` if sub is present.
 	 *
@@ -53,6 +60,7 @@ export interface JwtGuardOptions {
  *
  * @param options - Guard configuration
  * @returns A guard that implements JWT Bearer authentication
+ * @throws {Error} If the secret is empty
  *
  * @example
  * ```ts
@@ -75,7 +83,12 @@ export interface JwtGuardOptions {
  * ```
  */
 export function createJwtGuard(options: JwtGuardOptions): Guard {
+	if (options.secret.length === 0) {
+		throw new Error("createJwtGuard: `secret` must not be empty");
+	}
+
 	const guardName = options.name ?? "jwt";
+	const requireExp = options.requireExp ?? true;
 	const clockTolerance = options.clockToleranceSeconds ?? 0;
 	const now = () => Math.floor(Date.now() / 1000);
 
@@ -100,6 +113,9 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 		false,
 		["verify"],
 	);
+	// Failures surface per-request in verifyHS256 (which returns false); this
+	// prevents an unhandled rejection when no request has awaited it yet.
+	cryptoKeyPromise.catch(() => {});
 
 	return {
 		name: guardName,
@@ -133,14 +149,19 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			}
 
 			// Decode header and payload
-			let header: Record<string, unknown>;
-			let payload: Record<string, unknown>;
+			let header: unknown;
+			let payload: unknown;
 
 			try {
 				header = JSON.parse(base64UrlDecode(encodedHeader));
 				payload = JSON.parse(base64UrlDecode(encodedPayload));
 			} catch {
 				// Invalid base64 or JSON - return null (don't throw)
+				return null;
+			}
+
+			// Header and payload must be plain (non-null, non-array) objects
+			if (!isPlainObject(header) || !isPlainObject(payload)) {
 				return null;
 			}
 
@@ -160,6 +181,9 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			}
 
 			// Validate exp (expiration)
+			if (requireExp && payload.exp === undefined) {
+				return null;
+			}
 			if (payload.exp !== undefined) {
 				const exp = typeof payload.exp === "number" ? payload.exp : null;
 				if (exp === null || now() > exp + clockTolerance) {
@@ -231,6 +255,13 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			return null;
 		},
 	};
+}
+
+/**
+ * Check that a parsed JSON value is a non-null, non-array object.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

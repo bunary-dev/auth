@@ -434,6 +434,43 @@ describe("createJwtGuard", () => {
 		expect(user).toBeNull();
 	});
 
+	describe("non-object header/payload JSON", () => {
+		const values = ["null", "[]", '["a"]', "123", '"str"', "true"];
+
+		const signedToken = async (rawHeader: string, rawPayload: string) => {
+			const h = base64UrlEncode(rawHeader);
+			const p = base64UrlEncode(rawPayload);
+			const sig = base64UrlEncodeUint8Array(
+				await signHS256(`${h}.${p}`, secret),
+			);
+			return `${h}.${p}.${sig}`;
+		};
+
+		const run = async (token: string) => {
+			const guard = createJwtGuard({ secret });
+			return guard.authenticate(
+				new Request("http://localhost/test", {
+					headers: { Authorization: `Bearer ${token}` },
+				}),
+			);
+		};
+
+		for (const value of values) {
+			test(`returns null when header is ${value}`, async () => {
+				const token = await signedToken(value, JSON.stringify({ sub: "1" }));
+				expect(await run(token)).toBeNull();
+			});
+
+			test(`returns null when signed payload is ${value}`, async () => {
+				const token = await signedToken(
+					JSON.stringify({ alg: "HS256", typ: "JWT" }),
+					value,
+				);
+				expect(await run(token)).toBeNull();
+			});
+		}
+	});
+
 	describe("BufferSource compatibility with Uint8Array secrets", () => {
 		test("works with Uint8Array secret backed by ArrayBuffer", async () => {
 			const secretBytes = new TextEncoder().encode("test-secret-key");
@@ -567,6 +604,46 @@ describe("createJwtGuard", () => {
 			expect(user).not.toBeNull();
 			expect(user?.id).toBe("custom-user");
 		});
+	});
+});
+
+describe("createJwtGuard requireExp and secret validation", () => {
+	const secret = "test-secret-key";
+	const bearer = (token: string) =>
+		new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+
+	test("rejects tokens without exp by default", async () => {
+		const guard = createJwtGuard({ secret });
+		const token = await createTestJwt({ sub: "123" }, secret);
+		expect(await guard.authenticate(bearer(token))).toBeNull();
+	});
+
+	test("accepts tokens without exp when requireExp is false", async () => {
+		const guard = createJwtGuard({ secret, requireExp: false });
+		const token = await createTestJwt({ sub: "123" }, secret);
+		const user = await guard.authenticate(bearer(token));
+		expect(user?.id).toBe("123");
+	});
+
+	test("accepts tokens with valid exp when requireExp is true", async () => {
+		const guard = createJwtGuard({ secret, requireExp: true });
+		const token = await createTestJwt(
+			{ sub: "123", exp: Math.floor(Date.now() / 1000) + 3600 },
+			secret,
+		);
+		expect(await guard.authenticate(bearer(token))).not.toBeNull();
+	});
+
+	test("throws for an empty string secret", () => {
+		expect(() => createJwtGuard({ secret: "" })).toThrow(/secret/i);
+	});
+
+	test("throws for an empty Uint8Array secret", () => {
+		expect(() => createJwtGuard({ secret: new Uint8Array(0) })).toThrow(
+			/secret/i,
+		);
 	});
 });
 

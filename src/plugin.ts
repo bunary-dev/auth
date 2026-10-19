@@ -8,7 +8,7 @@ import type {
  * Install an authentication plugin into an auth manager.
  *
  * Merges plugin guards (overriding existing guards with the same name),
- * calls the optional routes callback, and calls the optional configure callback.
+ * calls the optional routes callback with the given router, and calls the optional configure callback.
  *
  * **Note**: This function requires an `InstallableAuthManager` (created by `createAuthManager()`).
  * Custom `AuthManagerInterface` implementations cannot use plugins unless they also
@@ -17,7 +17,9 @@ import type {
  * @param manager - The auth manager to install the plugin into (must be created by `createAuthManager()`)
  * @param plugin - The plugin to install
  * @param pluginOptions - Optional plugin-specific configuration (defaults to `{}` if omitted)
+ * @param router - Router that `plugin.routes` registers onto; required when the plugin defines `routes`
  *
+ * @throws {Error} If the plugin defines `routes` and no router is provided
  * @throws {Error} If the manager doesn't support plugin installation (missing `_guards` property)
  *
  * @example
@@ -39,6 +41,7 @@ export function installAuthPlugin(
 	manager: InstallableAuthManager,
 	plugin: AuthPlugin,
 	pluginOptions?: Record<string, unknown>,
+	router?: AuthPluginRouter,
 ): void {
 	// Runtime check: ensure _guards exists (defensive programming)
 	if (!manager._guards || !(manager._guards instanceof Map)) {
@@ -54,25 +57,14 @@ export function installAuthPlugin(
 		}
 	}
 
-	// Call routes callback if provided
-	// Note: Full route integration depends on HTTP package middleware hooks (auth issue #15)
+	// Routes can only be mounted on a real router; never silently drop them
 	if (plugin.routes) {
-		// Minimal router stub for now (routes won't be registered until HTTP integration)
-		const routerStub: AuthPluginRouter = {
-			get: (
-				_path: string,
-				_handler: (request: Request) => Response | Promise<Response>,
-			) => {
-				// No-op until HTTP integration is available
-			},
-			post: (
-				_path: string,
-				_handler: (request: Request) => Response | Promise<Response>,
-			) => {
-				// No-op until HTTP integration is available
-			},
-		};
-		plugin.routes(routerStub);
+		if (!router) {
+			throw new Error(
+				`Auth plugin "${plugin.name}" registers routes, but no router was provided to installAuthPlugin(). Pass a router as the fourth argument.`,
+			);
+		}
+		plugin.routes(router);
 	}
 
 	// Call configure callback if provided (always called with options, defaulting to {})
