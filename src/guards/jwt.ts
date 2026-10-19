@@ -133,14 +133,19 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			}
 
 			// Decode header and payload
-			let header: Record<string, unknown>;
-			let payload: Record<string, unknown>;
+			let header: unknown;
+			let payload: unknown;
 
 			try {
 				header = JSON.parse(base64UrlDecode(encodedHeader));
 				payload = JSON.parse(base64UrlDecode(encodedPayload));
 			} catch {
 				// Invalid base64 or JSON - return null (don't throw)
+				return null;
+			}
+
+			// Header and payload must be plain (non-null, non-array) objects
+			if (!isPlainObject(header) || !isPlainObject(payload)) {
 				return null;
 			}
 
@@ -231,6 +236,13 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			return null;
 		},
 	};
+}
+
+/**
+ * Check that a parsed JSON value is a non-null, non-array object.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
