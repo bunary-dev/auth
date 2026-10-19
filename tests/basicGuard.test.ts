@@ -189,6 +189,40 @@ describe("createBasicGuard", () => {
 		expect(user).toEqual({ id: 1, username: "admin" });
 	});
 
+	test("decodes non-ASCII credentials as UTF-8", async () => {
+		let got: [string, string] | undefined;
+		const guard = createBasicGuard({
+			verify: async (username, password) => {
+				got = [username, password];
+				return { id: 1 };
+			},
+		});
+		const b64 = Buffer.from("usér:pässword", "utf-8").toString("base64");
+		const request = new Request("http://localhost/test", {
+			headers: { Authorization: `Basic ${b64}` },
+		});
+		await guard.authenticate(request);
+
+		expect(got).toEqual(["usér", "pässword"]);
+	});
+
+	test("returns null for invalid UTF-8 without throwing", async () => {
+		let called = false;
+		const guard = createBasicGuard({
+			verify: async () => {
+				called = true;
+				return { id: 1 };
+			},
+		});
+		const b64 = Buffer.from([0x61, 0x3a, 0xff, 0xfe]).toString("base64");
+		const request = new Request("http://localhost/test", {
+			headers: { Authorization: `Basic ${b64}` },
+		});
+
+		expect(await guard.authenticate(request)).toBeNull();
+		expect(called).toBe(false);
+	});
+
 	test("handles case-insensitive Authorization scheme", async () => {
 		const guard = createBasicGuard({
 			verify: async (username) => ({ id: 1, username }),

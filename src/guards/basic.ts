@@ -79,9 +79,11 @@ export function createBasicGuard(options: BasicGuardOptions): Guard {
 			// Decode base64
 			let decoded: string;
 			try {
-				decoded = atob(encoded);
+				const binary = atob(encoded);
+				const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+				decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 			} catch {
-				// Invalid base64 - return null (don't throw)
+				// Invalid base64 or UTF-8 - return null (don't throw)
 				return null;
 			}
 
