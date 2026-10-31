@@ -23,10 +23,13 @@
  * });
  * ```
  */
+import { createCookieJar } from "./cookies.js";
 import type {
+	AttemptResult,
 	AuthConfig,
 	AuthManagerInterface,
 	AuthUser,
+	Credentials,
 	Guard,
 	GuardInput,
 } from "./types.js";
@@ -67,13 +70,17 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 		 */
 		createContext(input: GuardInput) {
 			let currentUser: AuthUser | null = null;
+			const guardInput: GuardInput = {
+				request: input.request,
+				cookies: input.cookies ?? createCookieJar(input.request),
+			};
 
 			return {
 				guard: (name?: string) => this.guard(name),
 
 				authenticate: async (guardName?: string): Promise<AuthUser | null> => {
 					const guard = this.guard(guardName);
-					const user = await guard.authenticate(input.request);
+					const user = await guard.authenticate(input.request, guardInput);
 					currentUser = user;
 					return user;
 				},
@@ -82,6 +89,37 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 
 				check: (): boolean => currentUser !== null,
 
+				guest: (): boolean => currentUser === null,
+
+				attempt: async (
+					credentials: Credentials,
+					guardName?: string,
+				): Promise<AttemptResult | false> => {
+					const guard = this.guard(guardName);
+					if (!guard.attempt) {
+						throw new Error(`Guard "${guard.name}" does not support attempt()`);
+					}
+					const result = await guard.attempt(credentials, guardInput);
+					if (!result) {
+						return false;
+					}
+					currentUser = result.user;
+					return result;
+				},
+
+				login: async (
+					user: AuthUser,
+					guardName?: string,
+				): Promise<string | undefined> => {
+					const guard = this.guard(guardName);
+					if (!guard.login) {
+						throw new Error(`Guard "${guard.name}" does not support login()`);
+					}
+					const token = await guard.login(user, guardInput);
+					currentUser = user;
+					return token;
+				},
+
 				require: (): AuthUser => {
 					if (!currentUser) {
 						throw new Error("Unauthenticated");
@@ -89,7 +127,11 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 					return currentUser;
 				},
 
-				logout: (): void => {
+				logout: async (guardName?: string): Promise<void> => {
+					const guard = this.guard(guardName);
+					if (guard.logout) {
+						await guard.logout(guardInput);
+					}
 					currentUser = null;
 				},
 			};

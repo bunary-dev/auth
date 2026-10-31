@@ -14,9 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the global singleton helpers `auth`, `setAuthManager`, `getAuthManager` and `clearAuthManager`. Use `createAuth()` or `createAuthManager().createContext({ request })` (#76)
 - Removed `installAuthPlugin` together with the `AuthPlugin`, `AuthPluginRouter` and `InstallableAuthManager` types. `createAuthManager` now returns `AuthManagerInterface` and no longer has an internal `_guards` property (#76)
 - Removed `createCookieStorage` (auth's own cookie parsing and serialisation) and the `AuthStorage` type (#76)
+- `AuthContext.logout()` now returns a promise and takes an optional guard name. It calls the guard's `logout()` (the session guard clears its cookie, the Basic guard throws because it is stateless) before clearing the request's user (#77)
 
 ### Added
 
+- `createSessionGuard`: a cookie session guard whose session is a jose encrypted JWT (`dir` + `A256GCM`) holding the user id and `exp`, in an `HttpOnly`, `SameSite=Lax`, `Path=/` cookie (`Secure` by default). It takes a `provider`, a 32-byte `secret` (construction throws if it is missing or the wrong length), `cookieName` (validated as an RFC 6265 token), `lifetimeSeconds` (default 7200), `secure` and `path`. Modified, forged or expired session cookies authenticate nobody, which closes #44 (#77)
+- `UserProvider` interface (`retrieveById`, `retrieveByCredentials`, `validateCredentials`) and the `Credentials` and `AttemptResult` types (#77)
+- `AuthContext.attempt(credentials, guardName?)`, `login(user, guardName?)` and `guest()`, with optional `attempt`/`login`/`logout` methods on `Guard`. The session guard writes and clears its cookie; the JWT guard's `attempt()` returns `{ user, token }` and `login()` returns a token; the Basic guard's `attempt()` authenticates the current request only and its `login()`/`logout()` throw. A failed `attempt()` resolves to `false` and writes no cookie (#77)
+- `createJwtGuard` options `provider`, `signingKey` (private key for asymmetric algorithms) and `ttlSeconds` (default 3600) for issuing tokens signed with the first configured algorithm (#77)
+- `CookieJar`/`CookieOptions` types (shaped like `@bunary/http`'s `ctx.cookies`), an optional `cookies` field on `GuardInput`, and `createCookieJar(request)`, a jar built on `Bun.CookieMap`/`Bun.Cookie` that rejects non-token cookie names. `createAuth()` uses `ctx.cookies` when http provides it, and otherwise appends its own jar's `Set-Cookie` headers to the response (#77)
 - `createJwtGuard` options `algorithms` (default `["HS256"]` with `secret`), `key` (public `CryptoKey`/`KeyObject`/JWK) and `jwksUrl` (verified through jose's `createRemoteJWKSet` and its cache), so RS256, PS256, ES256 and EdDSA tokens can be verified; HS384/HS512 work with `secret` (#76)
 - `AuthLocals` type and a `createAuth<TLocals>()` type parameter, giving a typed `ctx.locals.auth` with `createApp<AuthLocals>()` (#76)
 - `jose` is a direct dependency; `@bunary/core` is declared as an optional peer dependency (#76)

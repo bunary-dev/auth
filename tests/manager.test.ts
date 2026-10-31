@@ -189,7 +189,7 @@ describe("AuthManager", () => {
 			await ctx.authenticate();
 			expect(ctx.check()).toBe(true);
 
-			ctx.logout();
+			await ctx.logout();
 			expect(ctx.check()).toBe(false);
 			expect(ctx.user()).toBeNull();
 		});

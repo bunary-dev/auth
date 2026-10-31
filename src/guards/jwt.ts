@@ -6,8 +6,15 @@ import {
 	type JWTVerifyOptions,
 	jwtVerify,
 	type KeyObject,
+	SignJWT,
 } from "jose";
-import type { AuthUser, Guard } from "../types.js";
+import type {
+	AttemptResult,
+	AuthUser,
+	Credentials,
+	Guard,
+	UserProvider,
+} from "../types.js";
 
 /**
  * Options for creating a JWT guard.
@@ -85,6 +92,25 @@ export interface JwtGuardOptions {
 	 * @returns The authenticated user or null if mapping fails
 	 */
 	mapUser?: (payload: Record<string, unknown>) => AuthUser | null;
+
+	/**
+	 * User provider for `attempt(credentials)`. Without it, `attempt()` throws.
+	 */
+	provider?: UserProvider;
+
+	/**
+	 * Private key that signs tokens issued by `attempt()`/`login()` with an
+	 * asymmetric algorithm (the counterpart of `key`). Not needed with
+	 * `secret`, which both signs and verifies. Without either, issuing a
+	 * token throws.
+	 */
+	signingKey?: CryptoKey | KeyObject | JWK;
+
+	/**
+	 * Lifetime in seconds of tokens issued by `attempt()`/`login()`
+	 * (sets `exp`). Defaults to 3600.
+	 */
+	ttlSeconds?: number;
 }
 
 /**
@@ -137,6 +163,15 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 	if (secret !== undefined && secret.length === 0) {
 		throw new Error("createJwtGuard: `secret` must not be empty");
 	}
+	if (secret !== undefined && options.signingKey !== undefined) {
+		throw new Error(
+			"createJwtGuard: `signingKey` is for asymmetric algorithms; `secret` already signs tokens",
+		);
+	}
+	const ttlSeconds = options.ttlSeconds ?? 3600;
+	if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {
+		throw new Error("createJwtGuard: `ttlSeconds` must be a positive integer");
+	}
 
 	const algorithms = options.algorithms ?? (secret ? ["HS256"] : undefined);
 	if (!algorithms) {
@@ -188,6 +223,28 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 	if (options.audience !== undefined) verifyOptions.audience = options.audience;
 
 	const guardName = options.name ?? "jwt";
+
+	// Tokens are signed with the first accepted algorithm
+	const signingAlgorithm = algorithms[0] as string;
+	const signKey =
+		secret !== undefined ? (verificationKey as Uint8Array) : options.signingKey;
+
+	async function issueToken(user: AuthUser): Promise<string> {
+		if (signKey === undefined) {
+			throw new Error(
+				`Guard "${guardName}" cannot issue tokens: pass \`secret\` or \`signingKey\` to createJwtGuard`,
+			);
+		}
+		const now = Math.floor(Date.now() / 1000);
+		const jwt = new SignJWT({})
+			.setProtectedHeader({ alg: signingAlgorithm, typ: "JWT" })
+			.setSubject(String(user.id))
+			.setIssuedAt(now)
+			.setExpirationTime(now + ttlSeconds);
+		if (options.issuer !== undefined) jwt.setIssuer(options.issuer);
+		if (options.audience !== undefined) jwt.setAudience(options.audience);
+		return await jwt.sign(signKey);
+	}
 
 	return {
 		name: guardName,
@@ -244,6 +301,24 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 				}
 			}
 			return { ...claims, id: sub } as AuthUser;
+		},
+
+		async attempt(credentials: Credentials): Promise<AttemptResult | null> {
+			const provider = options.provider;
+			if (!provider) {
+				throw new Error(
+					`Guard "${guardName}" cannot attempt(): pass \`provider\` to createJwtGuard`,
+				);
+			}
+			const user = await provider.retrieveByCredentials(credentials);
+			if (!user || !(await provider.validateCredentials(user, credentials))) {
+				return null;
+			}
+			return { user, token: await issueToken(user) };
+		},
+
+		async login(user: AuthUser): Promise<string> {
+			return await issueToken(user);
 		},
 	};
 }
