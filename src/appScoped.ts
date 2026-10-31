@@ -1,7 +1,12 @@
-import type { Middleware } from "@bunary/http";
+import type { HandlerResponse, Middleware, RequestContext } from "@bunary/http";
 import { createCookieJar, withSetCookies } from "./cookies.js";
 import { createAuthManager } from "./manager.js";
-import type { AuthConfig, CookieJar } from "./types.js";
+import type {
+	AuthConfig,
+	AuthContext,
+	AuthManagerInterface,
+	CookieJar,
+} from "./types.js";
 
 /**
  * Create app-scoped authentication middleware for `@bunary/http`.
@@ -46,19 +51,42 @@ export function createAuth<TLocals extends object = Record<string, unknown>>(
 	config: AuthConfig,
 ): Middleware<TLocals> {
 	const manager = createAuthManager(config);
+	return authContextMiddleware<TLocals>(() => manager);
+}
 
+/**
+ * Build middleware that attaches a request-scoped `AuthContext` from the
+ * resolved manager to `ctx.locals.auth`, runs `before` (which may
+ * answer the request itself), then calls `next()`.
+ *
+ * Shared by `createAuth()` and the `@bunary/auth/provider` middleware.
+ *
+ * @internal
+ */
+export function authContextMiddleware<TLocals extends object>(
+	resolveManager: (ctx: RequestContext<TLocals>) => AuthManagerInterface,
+	before?: (
+		auth: AuthContext,
+		locals: Record<string, unknown>,
+	) => Promise<HandlerResponse | undefined>,
+): Middleware<TLocals> {
 	return async (ctx, next) => {
+		const manager = resolveManager(ctx);
+
 		// @bunary/http >= 1.0 provides ctx.cookies and appends its Set-Cookie headers
 		const httpCookies = (ctx as { cookies?: CookieJar }).cookies;
 		const fallback = httpCookies ? undefined : createCookieJar(ctx.request);
 
 		// Attach a request-scoped auth context to locals (per-request storage)
-		(ctx.locals as Record<string, unknown>).auth = manager.createContext({
+		const auth = manager.createContext({
 			request: ctx.request,
 			cookies: httpCookies ?? fallback,
 		});
+		const locals = ctx.locals as Record<string, unknown>;
+		locals.auth = auth;
 
-		const result = await next();
+		const early = before ? await before(auth, locals) : undefined;
+		const result = early !== undefined ? early : await next();
 		return fallback ? withSetCookies(result, fallback.headers()) : result;
 	};
 }

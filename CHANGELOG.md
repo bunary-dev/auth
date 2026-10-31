@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- The optional `@bunary/core` peer range is now `^1.0.0-rc.1` (was `^0.2.0`), which has `defineProvider` and `createToken` (#78)
 - `createJwtGuard` now verifies with [jose](https://github.com/panva/jose) `jwtVerify`, replacing the hand-written JWT parsing and HS256 verification. `secret` is optional now: pass exactly one of `secret`, `key` or `jwksUrl`. Invalid key configuration throws at construction (no or several key sources, empty `algorithms`, `none`, or an HMAC/asymmetric mismatch between the key source and `algorithms`) (#76)
 - `@bunary/http` is now a required peer dependency. `createAuth` is typed against its `Middleware`/`RequestContext`, and auth's own duplicated context and middleware types are gone (#76)
 - Removed the global singleton helpers `auth`, `setAuthManager`, `getAuthManager` and `clearAuthManager`. Use `createAuth()` or `createAuthManager().createContext({ request })` (#76)
@@ -17,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AuthContext.logout()` now returns a promise and takes an optional guard name. It calls the guard's `logout()` (the session guard clears its cookie, the Basic guard throws because it is stateless) before clearing the request's user (#77)
 
 ### Added
+
+- `@bunary/auth/provider` entry point for `@bunary/core` apps: `authProvider` (a core provider) reads the `auth` config key, validates it at boot (`BunaryError` on a missing or invalid config) and binds an auth manager under the exported `AuthToken`. It augments core's `BunaryConfig` with `auth?: AuthConfig`, so `defineConfig({ auth: { … } })` is type-checked. `authMiddleware(options?)` resolves the manager from `ctx.app` (or `options.app`) and sets `ctx.locals.auth` and `ctx.locals.user`; `requireAuth(options?)` answers guests with a 401 RFC 9457 problem response. New types `AuthMiddlewareOptions`, `AuthUserLocals` and `RequiredAuthLocals`. The main entry still does not import `@bunary/core` (#78)
+- `AuthConfig.provider` (optional `UserProvider`) and `AuthManagerInterface.provider()`, which returns it or throws when none is configured (#78)
 
 - `createSessionGuard`: a cookie session guard whose session is a jose encrypted JWT (`dir` + `A256GCM`) holding the user id and `exp`, in an `HttpOnly`, `SameSite=Lax`, `Path=/` cookie (`Secure` by default). It takes a `provider`, a 32-byte `secret` (construction throws if it is missing or the wrong length), `cookieName` (validated as an RFC 6265 token), `lifetimeSeconds` (default 7200), `secure` and `path`. Modified, forged or expired session cookies authenticate nobody, which closes #44 (#77)
 - `UserProvider` interface (`retrieveById`, `retrieveByCredentials`, `validateCredentials`) and the `Credentials` and `AttemptResult` types (#77)

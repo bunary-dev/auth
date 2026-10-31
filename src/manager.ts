@@ -32,6 +32,7 @@ import type {
 	Credentials,
 	Guard,
 	GuardInput,
+	UserProvider,
 } from "./types.js";
 
 export function createAuthManager(config: AuthConfig): AuthManagerInterface {
@@ -42,6 +43,7 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 	}
 
 	const defaultGuardName = config.defaultGuard;
+	const userProvider = config.provider;
 
 	const manager: AuthManagerInterface = {
 		/**
@@ -60,6 +62,20 @@ export function createAuthManager(config: AuthConfig): AuthManagerInterface {
 			}
 
 			return guard;
+		},
+
+		/**
+		 * Get the user provider from the config.
+		 *
+		 * @throws If the config has no `provider`
+		 */
+		provider(): UserProvider {
+			if (!userProvider) {
+				throw new Error(
+					"No user provider configured: set `provider` in the auth config",
+				);
+			}
+			return userProvider;
 		},
 
 		/**

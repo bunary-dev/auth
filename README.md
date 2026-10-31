@@ -2,7 +2,7 @@
 
 Authentication for the Bunary framework. Guard-based: `createAuth` is `@bunary/http` middleware that attaches a request-scoped auth context to `ctx.locals.auth`, `createAuthManager` covers standalone use, and the built-in guards are an encrypted cookie session guard and a JWT guard, both built on [jose](https://github.com/panva/jose) (JWT: HS256 by default; RS256/ES256/EdDSA via a public key or JWKS URL), and a Basic guard. Users are looked up through a `UserProvider`, and each guard supports Laravel-style `attempt()`, `login()` and `logout()`. See the full reference: [docs/index.md](./docs/index.md).
 
-Requires Bun ≥ 1.4.0. `@bunary/http` is a required peer dependency.
+Requires Bun ≥ 1.4.0. `@bunary/http` is a required peer dependency. `@bunary/core` (≥ 1.0.0-rc.1) is an optional peer: `@bunary/auth/provider` adds an `auth` config key, `authProvider`, `AuthToken` and `authMiddleware()`/`requireAuth()` (401 problem response) for core apps.
 
 ## Installation
 
@@ -30,7 +30,7 @@ app.get("/profile", async (ctx) => {
 app.listen({ port: 3000 });
 ```
 
-For user providers, the session guard, per-guard `attempt()`/`login()`/`logout()` semantics, JWT algorithms, keys and JWKS, the Basic guard (with `Bun.password`) and types, see [docs/index.md](./docs/index.md).
+For user providers, the session guard, per-guard `attempt()`/`login()`/`logout()` semantics, JWT algorithms, keys and JWKS, the Basic guard (with `Bun.password`), [using with `@bunary/core`](./docs/index.md#using-with-bunarycore) and types, see [docs/index.md](./docs/index.md).
 
 ## License
 

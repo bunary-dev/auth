@@ -10,7 +10,7 @@ Requires Bun ≥ 1.4.0.
 bun add @bunary/auth @bunary/http
 ```
 
-`@bunary/http` is a required peer dependency. `jose` is installed automatically as a dependency. `@bunary/core` is an optional peer dependency and is not needed for anything described here.
+`@bunary/http` is a required peer dependency. `jose` is installed automatically as a dependency. `@bunary/core` (≥ 1.0.0-rc.1) is an optional peer dependency, needed only for [`@bunary/auth/provider`](#using-with-bunarycore).
 
 ## Quick Start
 
@@ -58,6 +58,7 @@ There is no global auth singleton: each app creates its own middleware, so sever
 
 - `defaultGuard` — name of the guard used when none is passed
 - `guards` — record of named `Guard`s
+- `provider` — optional `UserProvider`, returned by `manager.provider()`. Guards still take their provider in their own options.
 
 `AuthLocals` is `{ auth: AuthContext }`. Pass it (or a type extending it) to both `createApp<TLocals>()` and `createAuth<TLocals>()` to get a typed `ctx.locals.auth`:
 
@@ -105,6 +106,7 @@ if (auth.check()) {
 ```
 
 - `guard(name?)` — get a guard by name or the default guard; throws for an unknown name
+- `provider()` — the `UserProvider` from `AuthConfig.provider`; throws when the config has none
 - `createContext({ request, cookies? })` — create a request-scoped `AuthContext` (safe under concurrency). `cookies` is the request's [cookie jar](#cookies); when omitted, the context creates one from the request, which reads cookies but leaves you no way to send the ones it writes. Pass your own jar when you use the session guard.
 
 ## User providers
@@ -397,9 +399,74 @@ interface Guard {
 
 `input` is `{ request, cookies }` from the auth context. `attempt` returns `null` for bad credentials, and the context turns that into `false`.
 
+## Using with @bunary/core
+
+`@bunary/auth/provider` wires auth into a `@bunary/core` application. It is a separate entry point because it imports `@bunary/core`; the main `@bunary/auth` entry never does, so apps without core typecheck and run without it.
+
+```bash
+bun add @bunary/auth @bunary/http @bunary/core
+```
+
+Put the auth config under the `auth` key of your bunary config and add `authProvider`:
+
+```ts
+import { createApp, defineConfig } from "@bunary/core";
+import { createSessionGuard } from "@bunary/auth";
+import { AuthToken, authProvider } from "@bunary/auth/provider";
+
+const config = defineConfig({
+  app: { name: "my-app" },
+  auth: {
+    defaultGuard: "session",
+    provider: users, // a UserProvider
+    guards: {
+      session: createSessionGuard({ provider: users, secret: process.env.SESSION_KEY! }),
+    },
+  },
+});
+
+const app = await createApp({ config, providers: [authProvider] }).boot();
+
+const manager = app.get(AuthToken); // AuthManagerInterface
+```
+
+- **`auth` config key.** Importing `@bunary/auth/provider` augments core's `BunaryConfig` with `auth?: AuthConfig` (`defaultGuard`, `guards`, optional `provider`), so `defineConfig({ auth: { … } })` is type-checked: unknown or mistyped keys are type errors.
+- **`authProvider`** is a core provider (built with `defineProvider`). Its `register()` reads `app.config.get("auth")`, builds the manager with `createAuthManager()` and binds it under `AuthToken`. It validates the config first, so `app.boot()` rejects with a `BunaryError` when `auth` is missing, is not an object, has an empty or unknown `defaultGuard`, has a guard without `authenticate()`, or has a `provider` missing one of its three methods.
+- **`AuthToken`** is a core token (`createToken<AuthManagerInterface>("auth.manager")`), so `app.get(AuthToken)` is typed. Each app gets its own manager.
+
+### Middleware: `authMiddleware()` and `requireAuth()`
+
+Both resolve the manager from the app at request time, authenticate the request with the default guard (or `guard`), and set `ctx.locals.auth` (the request's `AuthContext`) and `ctx.locals.user`:
+
+| Middleware | Guest | `ctx.locals` type |
+| --- | --- | --- |
+| `authMiddleware(options?)` | calls the handler with `user: null` | `AuthUserLocals` (`{ auth: AuthContext; user: AuthUser \| null }`) |
+| `requireAuth(options?)` | answers `401` with an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem response and skips the handler | `RequiredAuthLocals` (`{ auth: AuthContext; user: AuthUser }`) |
+
+```ts
+import { createRouter } from "@bunary/http";
+import { httpProvider } from "@bunary/http/provider";
+import { requireAuth, type RequiredAuthLocals } from "@bunary/auth/provider";
+
+const router = createRouter<RequiredAuthLocals>();
+router.use(requireAuth<RequiredAuthLocals>());
+router.get("/me", (ctx) => ({ id: ctx.locals.user.id }));
+
+const app = createApp({ config, providers: [authProvider, httpProvider(router)] });
+```
+
+Options (`AuthMiddlewareOptions`):
+
+- `guard` — guard name; defaults to `auth.defaultGuard`
+- `app` — the core `Application` to resolve `AuthToken` from. Defaults to `ctx.app`, which `@bunary/http` ≥ 1.0 sets for routers mounted with `httpProvider()`. With `@bunary/http` 0.3, pass it: `app.use(requireAuth({ app }))`.
+
+The 401 body is `{ "type": "about:blank", "title": "Unauthorized", "status": 401 }` with `Content-Type: application/problem+json; charset=utf-8`, produced by `@bunary/http`'s `problem(401)` when http has it (≥ 1.0) and by an identical built-in response with http 0.3. A request throws when no app is available or the app was not booted with `authProvider` (core's `MissingBindingError`). Errors thrown by a guard are not caught. Cookies written by guards are handled as in [`createAuth()`](#middleware-createauthconfig).
+
 ## Types
 
 Exported types: `AttemptResult`, `AuthConfig`, `AuthContext`, `AuthLocals`, `AuthManagerInterface`, `AuthUser`, `CookieJar`, `CookieOptions`, `Credentials`, `Guard`, `GuardInput`, `QueuedCookieJar`, `UserProvider`, `JwtGuardOptions`, `SessionGuardOptions`, `BasicGuardOptions`.
+
+From `@bunary/auth/provider`: `AuthMiddlewareOptions`, `AuthUserLocals`, `RequiredAuthLocals` (both take an optional user type parameter), plus the `BunaryConfig` augmentation.
 
 ## Removed in this release
 

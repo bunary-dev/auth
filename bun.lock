@@ -9,12 +9,13 @@
       },
       "devDependencies": {
         "@biomejs/biome": "2.6.3",
+        "@bunary/core": "file:./vendor/bunary-core-1.0.0-rc.2.tgz",
         "@bunary/http": "^0.3.0",
         "@types/bun": "^1.4.2",
         "typescript": "^7.0.2",
       },
       "peerDependencies": {
-        "@bunary/core": "^0.2.0",
+        "@bunary/core": "^1.0.0-rc.1",
         "@bunary/http": "^0.3.0",
       },
       "optionalPeers": [
@@ -45,7 +46,11 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.6.3", "", { "os": "win32", "cpu": "x64" }, "sha512-GhtOPphBWlnCepqpNk/w5eGN5oGRCzL20EbAkL1XCIpyboeVC9R642noyT43l8LSenGS4qz9IL8sKPfwY37V/Q=="],
 
+    "@bunary/core": ["@bunary/core@./vendor/bunary-core-1.0.0-rc.2.tgz", { "dependencies": { "@standard-schema/spec": "^1.1.0" } }, "sha512-1Ff9biIW5a3FULZZqewZNvtZ3x1aqdKGOezX0DUdnyLLSe/qQlCj2Jvdk61XEJSzrxtQISfna2rs+NX10SBOSg=="],
+
     "@bunary/http": ["@bunary/http@0.3.0", "", {}, "sha512-jD7mPZ6iVbx8A3z3LhM+YgUufhdwI4wWyY06FE3BJH3zrUI3fV3FMKwtIVG1ipl2tAafU3b8BpZJm/3Luol1pw=="],
+
+    "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
