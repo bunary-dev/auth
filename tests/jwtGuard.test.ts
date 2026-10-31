@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { createJwtGuard } from "../src/guards/jwt.js";
 
 describe("createJwtGuard", () => {
@@ -239,8 +239,6 @@ describe("createJwtGuard", () => {
 			id: "123",
 			email: "test@example.com",
 			name: "Test User",
-			sub: "123",
-			exp: expect.any(Number),
 		});
 	});
 
@@ -647,13 +645,136 @@ describe("createJwtGuard requireExp and secret validation", () => {
 	});
 });
 
+describe("createJwtGuard claim boundaries and default mapping", () => {
+	const secret = "test-secret-key";
+	const fixedNow = 1_800_000_000;
+	const bearer = (token: string) =>
+		new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+	const freezeClock = () => setSystemTime(new Date(fixedNow * 1000));
+
+	afterEach(() => {
+		setSystemTime();
+	});
+
+	test("rejects a token whose exp equals the current time", async () => {
+		freezeClock();
+		const guard = createJwtGuard({ secret });
+		const token = await createTestJwt({ sub: "123", exp: fixedNow }, secret);
+		expect(await guard.authenticate(bearer(token))).toBeNull();
+	});
+
+	test("accepts a token that expires one second from now", async () => {
+		freezeClock();
+		const guard = createJwtGuard({ secret });
+		const token = await createTestJwt(
+			{ sub: "123", exp: fixedNow + 1 },
+			secret,
+		);
+		expect((await guard.authenticate(bearer(token)))?.id).toBe("123");
+	});
+
+	test("rejects a token at exactly exp + clockToleranceSeconds", async () => {
+		freezeClock();
+		const guard = createJwtGuard({ secret, clockToleranceSeconds: 30 });
+		const atLimit = await createTestJwt(
+			{ sub: "123", exp: fixedNow - 30 },
+			secret,
+		);
+		const insideLimit = await createTestJwt(
+			{ sub: "123", exp: fixedNow - 29 },
+			secret,
+		);
+		expect(await guard.authenticate(bearer(atLimit))).toBeNull();
+		expect(await guard.authenticate(bearer(insideLimit))).not.toBeNull();
+	});
+
+	test("accepts nbf in the future but within clockToleranceSeconds", async () => {
+		freezeClock();
+		const guard = createJwtGuard({ secret, clockToleranceSeconds: 30 });
+		const token = await createTestJwt(
+			{ sub: "123", exp: fixedNow + 3600, nbf: fixedNow + 30 },
+			secret,
+		);
+		expect(await guard.authenticate(bearer(token))).not.toBeNull();
+	});
+
+	test("rejects nbf beyond clockToleranceSeconds", async () => {
+		freezeClock();
+		const guard = createJwtGuard({ secret, clockToleranceSeconds: 30 });
+		const token = await createTestJwt(
+			{ sub: "123", exp: fixedNow + 3600, nbf: fixedNow + 31 },
+			secret,
+		);
+		expect(await guard.authenticate(bearer(token))).toBeNull();
+	});
+
+	test("rejects unsigned alg: none tokens", async () => {
+		const guard = createJwtGuard({ secret });
+		const header = base64UrlEncode(JSON.stringify({ alg: "none", typ: "JWT" }));
+		const payload = base64UrlEncode(
+			JSON.stringify({ sub: "123", exp: Math.floor(Date.now() / 1000) + 3600 }),
+		);
+		expect(
+			await guard.authenticate(bearer(`${header}.${payload}.`)),
+		).toBeNull();
+		expect(
+			await guard.authenticate(bearer(`${header}.${payload}.c2ln`)),
+		).toBeNull();
+	});
+
+	test("rejects alg: none even when HMAC-signed with the secret", async () => {
+		const guard = createJwtGuard({ secret });
+		const token = await createTestJwt(
+			{ sub: "123", exp: Math.floor(Date.now() / 1000) + 3600 },
+			secret,
+			{ alg: "none", typ: "JWT" },
+		);
+		expect(await guard.authenticate(bearer(token))).toBeNull();
+	});
+
+	test("rejects alg: RS256 tokens", async () => {
+		const guard = createJwtGuard({ secret });
+		const token = await createTestJwt(
+			{ sub: "123", exp: Math.floor(Date.now() / 1000) + 3600 },
+			secret,
+			{ alg: "RS256", typ: "JWT" },
+		);
+		expect(await guard.authenticate(bearer(token))).toBeNull();
+	});
+
+	test("default mapping excludes registered claims", async () => {
+		const exp = Math.floor(Date.now() / 1000) + 3600;
+		const guard = createJwtGuard({ secret, issuer: "my-app", audience: "api" });
+		const token = await createTestJwt(
+			{
+				sub: "123",
+				iss: "my-app",
+				aud: "api",
+				exp,
+				nbf: exp - 7200,
+				iat: exp - 7200,
+				jti: "token-1",
+				email: "test@example.com",
+				roles: ["admin"],
+			},
+			secret,
+		);
+		expect(await guard.authenticate(bearer(token))).toEqual({
+			id: "123",
+			email: "test@example.com",
+			roles: ["admin"],
+		});
+	});
+});
+
 // Helper function to create a test JWT (HS256)
 async function createTestJwt(
 	payload: Record<string, unknown>,
 	secret: string | Uint8Array,
+	header: Record<string, unknown> = { alg: "HS256", typ: "JWT" },
 ): Promise<string> {
-	const header = { alg: "HS256", typ: "JWT" };
-
 	const encodedHeader = base64UrlEncode(JSON.stringify(header));
 	const encodedPayload = base64UrlEncode(JSON.stringify(payload));
 
