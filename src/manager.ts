@@ -40,7 +40,7 @@ export function createAuthManager(config: AuthConfig): InstallableAuthManager {
 
 	const defaultGuardName = config.defaultGuard;
 
-	return {
+	const manager = {
 		/**
 		 * Get a guard by name.
 		 *
@@ -94,7 +94,16 @@ export function createAuthManager(config: AuthConfig): InstallableAuthManager {
 				},
 			};
 		},
-		// Internal: expose guards map for plugin installation
-		_guards: guards,
 	};
+
+	// Internal: expose guards map for plugin installation. Non-enumerable so it
+	// stays out of Object.keys(), spreads and serialisation of the manager.
+	Object.defineProperty(manager, "_guards", {
+		value: guards,
+		enumerable: false,
+		writable: false,
+		configurable: false,
+	});
+
+	return manager as InstallableAuthManager;
 }

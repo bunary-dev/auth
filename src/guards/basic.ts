@@ -37,13 +37,17 @@ export interface BasicGuardOptions {
  * ```ts
  * import { createBasicGuard, createAuthManager } from "@bunary/auth";
  *
+ * // Store only password hashes, e.g. created with `await Bun.password.hash(pw)`
+ * const users = new Map([["admin", { id: 1, passwordHash: process.env.ADMIN_PASSWORD_HASH! }]]);
+ *
  * const basicGuard = createBasicGuard({
  *   name: "admin",
  *   async verify(username, password) {
- *     if (username === "admin" && password === "secret") {
- *       return { id: 1, username: "admin" };
- *     }
- *     return null;
+ *     const user = users.get(username);
+ *     if (!user) return null;
+ *     // Bun.password.verify compares against the hash in constant time
+ *     if (!(await Bun.password.verify(password, user.passwordHash))) return null;
+ *     return { id: user.id, username };
  *   }
  * });
  *
