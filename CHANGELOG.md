@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `createJwtGuard` throws on an empty secret and no longer leaves the key-import promise unobserved (#63)
 - `createJwtGuard` rejects a token at exactly `exp` (`now >= exp + clockToleranceSeconds`), as RFC 7519 requires (#43)
+- The JSDoc examples on the package entry and `createAuth()` (shipped in `dist/*.d.ts`), the README Quick Start and the docs examples imported `createApp` from `@bunary/http`, which 1.0 no longer exports. They now build the app with `createApp` from `@bunary/core`, routes with `createRouter` from `@bunary/http` and mount them with `httpProvider`/`serve` from `@bunary/http/provider`. A test checks every example import against the exports of the package it names (#86)
 
 ### Changed
 

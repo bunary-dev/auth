@@ -5,14 +5,16 @@
  *
  * @example
  * ```ts
- * import { createApp } from "@bunary/http";
+ * import { createApp } from "@bunary/core";
+ * import { createRouter } from "@bunary/http";
+ * import { httpProvider, serve } from "@bunary/http/provider";
  * import { createAuth, createJwtGuard } from "@bunary/auth";
  * import type { AuthLocals } from "@bunary/auth";
  *
- * const app = createApp<AuthLocals>();
+ * const router = createRouter<AuthLocals>();
  *
  * // Attach a request-scoped auth context to ctx.locals.auth
- * app.use(createAuth<AuthLocals>({
+ * router.use(createAuth<AuthLocals>({
  *   defaultGuard: "jwt",
  *   guards: {
  *     jwt: createJwtGuard({ secret: process.env.JWT_SECRET! })
@@ -20,11 +22,17 @@
  * }));
  *
  * // Access auth in route handlers
- * app.get("/profile", async (ctx) => {
+ * router.get("/profile", async (ctx) => {
  *   const user = await ctx.locals.auth.authenticate();
  *   if (!user) return new Response("Unauthorized", { status: 401 });
  *   return { user };
  * });
+ *
+ * const app = await createApp({
+ *   config: { app: { name: "my-api" }, http: { port: 3000 } },
+ *   providers: [httpProvider(router)],
+ * }).boot();
+ * serve(app);
  * ```
  */
 
