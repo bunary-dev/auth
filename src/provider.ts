@@ -14,14 +14,14 @@ import {
 	type Provider,
 	type Token,
 } from "@bunary/core";
-import type { Middleware } from "@bunary/http";
-import * as http from "@bunary/http";
 import { authContextMiddleware } from "./appScoped.js";
 import { createAuthManager } from "./manager.js";
 import type {
 	AuthConfig,
 	AuthContext,
 	AuthManagerInterface,
+	AuthMiddleware,
+	AuthRequestContext,
 	AuthUser,
 } from "./types.js";
 
@@ -150,6 +150,20 @@ export interface AuthMiddlewareOptions {
 }
 
 /**
+ * The request context {@link authMiddleware} and {@link requireAuth} accept:
+ * an {@link AuthRequestContext} whose optional `app` is a core
+ * `Application`. `@bunary/http`'s `RequestContext` fits without casts.
+ *
+ * @typeParam TLocals - Shape of `ctx.locals`
+ */
+export type AuthAppRequestContext<
+	TLocals extends object = Record<string, unknown>,
+> = AuthRequestContext<TLocals> & {
+	/** Application to resolve {@link AuthToken} from */
+	app?: Application;
+};
+
+/**
  * `ctx.locals` added by {@link authMiddleware}: the auth context and the
  * user, or `null` for a guest.
  */
@@ -170,12 +184,8 @@ export type RequiredAuthLocals<TUser extends AuthUser = AuthUser> = {
 	user: TUser;
 };
 
-/** RFC 9457 401 response; uses `@bunary/http`'s `problem()` when it has one. */
+/** RFC 9457 401 problem response. */
 function unauthorized(): Response {
-	const problem = (http as { problem?: (status: number) => Response }).problem;
-	if (problem) {
-		return problem(401);
-	}
 	return new Response(
 		JSON.stringify({ type: "about:blank", title: "Unauthorized", status: 401 }),
 		{
@@ -189,10 +199,10 @@ function createMiddleware<TLocals extends object>(
 	name: string,
 	options: AuthMiddlewareOptions,
 	required: boolean,
-): Middleware<TLocals> {
-	return authContextMiddleware<TLocals>(
+): AuthMiddleware<AuthAppRequestContext<TLocals>> {
+	return authContextMiddleware<AuthAppRequestContext<TLocals>>(
 		(ctx) => {
-			const app = options.app ?? (ctx as { app?: Application }).app;
+			const app = options.app ?? ctx.app;
 			if (!app) {
 				throw new Error(
 					`${name}: no @bunary/core Application on ctx.app; mount the router with httpProvider() or pass { app }`,
@@ -227,7 +237,9 @@ function createMiddleware<TLocals extends object>(
  */
 export function authMiddleware<
 	TLocals extends object = Record<string, unknown>,
->(options: AuthMiddlewareOptions = {}): Middleware<TLocals> {
+>(
+	options: AuthMiddlewareOptions = {},
+): AuthMiddleware<AuthAppRequestContext<TLocals>> {
 	return createMiddleware<TLocals>("authMiddleware", options, false);
 }
 
@@ -248,6 +260,6 @@ export function authMiddleware<
  */
 export function requireAuth<TLocals extends object = Record<string, unknown>>(
 	options: AuthMiddlewareOptions = {},
-): Middleware<TLocals> {
+): AuthMiddleware<AuthAppRequestContext<TLocals>> {
 	return createMiddleware<TLocals>("requireAuth", options, true);
 }

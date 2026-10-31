@@ -66,9 +66,10 @@ export interface UserProvider<TUser extends AuthUser = AuthUser> {
 }
 
 /**
- * Options accepted by `CookieJar.set()` / `CookieJar.delete()`.
+ * Options accepted by `AuthCookieJar.set()` / `AuthCookieJar.delete()`.
  *
- * A subset of `@bunary/http`'s `CookieSerializeOptions`.
+ * Only the attributes auth sets; a jar whose options type is wider
+ * (e.g. `@bunary/http`'s) still fits.
  */
 export interface CookieOptions {
 	path?: string;
@@ -84,10 +85,10 @@ export interface CookieOptions {
 /**
  * Per-request cookie access used by the session guard.
  *
- * Structurally compatible with `@bunary/http`'s `ctx.cookies` (`CookieJar`),
- * so that jar can be passed straight through.
+ * A structural type: any object with these methods works, including
+ * `@bunary/http`'s `ctx.cookies` and {@link createCookieJar}'s jar.
  */
-export interface CookieJar {
+export interface AuthCookieJar {
 	/** Read a cookie from the request, or `undefined` if it was not sent. */
 	get(name: string): string | undefined;
 	/** Queue a `Set-Cookie` header for the response. */
@@ -95,6 +96,60 @@ export interface CookieJar {
 	/** Queue a `Set-Cookie` header that expires the cookie. */
 	delete(name: string, options?: CookieOptions): void;
 }
+
+/**
+ * Alias of {@link AuthCookieJar}.
+ */
+export type CookieJar = AuthCookieJar;
+
+/**
+ * The request context auth middleware reads: the members of
+ * `@bunary/http`'s `RequestContext` that auth uses, so http's context (or
+ * any object of this shape) can be passed without casts.
+ *
+ * @typeParam TLocals - Shape of `ctx.locals`
+ */
+export interface AuthRequestContext<
+	TLocals extends object = Record<string, unknown>,
+> {
+	/** The incoming request */
+	request: Request;
+	/**
+	 * Cookie jar for this request. When absent, the middleware uses its own
+	 * jar and appends the queued `Set-Cookie` headers to the response.
+	 */
+	cookies?: AuthCookieJar;
+	/** Per-request storage; auth sets `locals.auth` (and `locals.user`). */
+	locals: TLocals;
+	/** The application the router is mounted on, if any. */
+	app?: unknown;
+}
+
+/**
+ * What a handler or `next()` may produce, matching `@bunary/http`'s
+ * `HandlerResponse`: a `Response`, or a value the framework converts
+ * (objects to JSON, strings and numbers to text, `null`/`undefined` to 204).
+ */
+export type AuthHandlerResult =
+	| Response
+	| object
+	| string
+	| number
+	| null
+	| undefined;
+
+/**
+ * Middleware returned by `createAuth()`, `authMiddleware()` and
+ * `requireAuth()`. Assignable to `@bunary/http`'s `Middleware<TLocals>`.
+ *
+ * @typeParam Ctx - The request context the middleware accepts
+ */
+export type AuthMiddleware<
+	Ctx extends AuthRequestContext<object> = AuthRequestContext,
+> = (
+	ctx: Ctx,
+	next: () => Promise<AuthHandlerResult>,
+) => Promise<AuthHandlerResult>;
 
 /**
  * Result of a successful `attempt()`.
@@ -206,7 +261,7 @@ export interface GuardInput {
 	 * Cookie jar for this request (e.g. `@bunary/http`'s `ctx.cookies`).
 	 * The manager creates one from the request when omitted.
 	 */
-	cookies?: CookieJar;
+	cookies?: AuthCookieJar;
 }
 
 /**

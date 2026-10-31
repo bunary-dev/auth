@@ -1,23 +1,22 @@
-import type { HandlerResponse } from "@bunary/http";
-import type { CookieJar } from "./types.js";
+import type { AuthCookieJar, AuthHandlerResult } from "./types.js";
 
 /**
- * A {@link CookieJar} that also returns its queued `Set-Cookie` values.
+ * A {@link AuthCookieJar} that also returns its queued `Set-Cookie` values.
  */
-export interface QueuedCookieJar extends CookieJar {
+export interface QueuedCookieJar extends AuthCookieJar {
 	/** The queued `Set-Cookie` header values, one per `set()`/`delete()` call. */
 	headers(): string[];
 }
 
 /**
- * Create a {@link CookieJar} for a request, backed by Bun's `Bun.CookieMap`
+ * Create a {@link AuthCookieJar} for a request, backed by Bun's `Bun.CookieMap`
  * (reading) and `Bun.Cookie` (serialising). `set()` and `delete()` throw
  * for names that are not RFC 6265 tokens, so a name can't inject attributes
  * or headers.
  *
- * `createAuth()` uses `ctx.cookies` when `@bunary/http` provides it and falls
+ * `createAuth()` uses `ctx.cookies` when the context provides one and falls
  * back to this jar otherwise. Use it directly with `createAuthManager()`
- * outside `@bunary/http`, and copy `headers()` onto your response.
+ * when you have no framework jar, and copy `headers()` onto your response.
  *
  * @param request - The incoming request
  * @returns A cookie jar backed by the request's `Cookie` header
@@ -99,9 +98,9 @@ export function isCookiePath(path: string): boolean {
  * @internal
  */
 export function withSetCookies(
-	result: HandlerResponse,
+	result: AuthHandlerResult,
 	setCookies: string[],
-): HandlerResponse {
+): AuthHandlerResult {
 	if (setCookies.length === 0) return result;
 
 	const response = toResponse(result);
@@ -114,7 +113,7 @@ export function withSetCookies(
 	});
 }
 
-function toResponse(result: HandlerResponse): Response {
+function toResponse(result: AuthHandlerResult): Response {
 	if (result instanceof Response) return result;
 	if (result === null || result === undefined) {
 		return new Response(null, { status: 204 });

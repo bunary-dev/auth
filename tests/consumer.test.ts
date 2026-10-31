@@ -3,6 +3,8 @@ import {
 	cpSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
+	readFileSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -11,7 +13,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // Builds the package into a temp dir and typechecks/runs consumers against
-// the shipped dist, with and without the optional @bunary/core peer.
+// the shipped dist, with and without the optional @bunary/core peer and
+// without @bunary/http.
 
 const root = resolve(import.meta.dir, "..");
 const modules = join(root, "node_modules");
@@ -36,11 +39,14 @@ function consumer(
 	name: string,
 	withCore: boolean,
 	files: Record<string, string>,
+	withHttp = true,
 ) {
 	const dir = join(work, name);
 	const nm = join(dir, "node_modules");
 	cpSync(join(work, "pkg"), join(nm, "@bunary", "auth"), { recursive: true });
-	link(join(modules, "@bunary", "http"), join(nm, "@bunary", "http"));
+	if (withHttp) {
+		link(join(modules, "@bunary", "http"), join(nm, "@bunary", "http"));
+	}
 	link(join(modules, "jose"), join(nm, "jose"));
 	link(join(modules, "@types"), join(nm, "@types"));
 	link(join(modules, "bun-types"), join(nm, "bun-types"));
@@ -103,7 +109,94 @@ afterAll(() => {
 	rmSync(work, { recursive: true, force: true });
 });
 
+/** Whether code (comments stripped) names the package as a module specifier. */
+function importsPackage(code: string, pkg: string): boolean {
+	const stripped = code
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/^\s*\/\/.*$/gm, "");
+	return stripped.includes(`"${pkg}"`) || stripped.includes(`'${pkg}'`);
+}
+
+function distFiles(): string[] {
+	const out = join(work, "pkg", "dist");
+	return readdirSync(out, { recursive: true, encoding: "utf8" })
+		.filter((file) => /\.(js|d\.ts)$/.test(file))
+		.map((file) => join(out, file));
+}
+
 describe("built package", () => {
+	test("no shipped file imports @bunary/http", () => {
+		const files = distFiles();
+		expect(files.length).toBeGreaterThan(0);
+		for (const file of files) {
+			expect(importsPackage(readFileSync(file, "utf8"), "@bunary/http")).toBe(
+				false,
+			);
+		}
+	});
+
+	test("only the provider entry imports @bunary/core", () => {
+		const files = distFiles();
+		const provider = files.filter((f) => /[\\/]provider\.(js|d\.ts)$/.test(f));
+		expect(provider).toHaveLength(2);
+		for (const file of provider) {
+			expect(importsPackage(readFileSync(file, "utf8"), "@bunary/core")).toBe(
+				true,
+			);
+		}
+		for (const file of files) {
+			if (provider.includes(file)) continue;
+			expect(importsPackage(readFileSync(file, "utf8"), "@bunary/core")).toBe(
+				false,
+			);
+		}
+	});
+
+	test("main entry typechecks and runs without @bunary/http or @bunary/core", () => {
+		const dir = consumer(
+			"standalone",
+			false,
+			{
+				"index.ts": `
+import {
+	createAuth,
+	createBasicGuard,
+	type AuthCookieJar,
+	type AuthLocals,
+	type AuthRequestContext,
+} from "@bunary/auth";
+
+const cookies: AuthCookieJar = {
+	get: () => undefined,
+	set: () => {},
+	delete: () => {},
+};
+const middleware = createAuth<AuthLocals>({
+	defaultGuard: "basic",
+	guards: { basic: createBasicGuard({ verify: () => ({ id: 7 }) }) },
+});
+const ctx: AuthRequestContext<AuthLocals> = {
+	request: new Request("http://x/", { headers: { Authorization: "Basic " + btoa("a:b") } }),
+	cookies,
+	locals: {} as AuthLocals,
+};
+const res = await middleware(ctx, async () => {
+	const user = await ctx.locals.auth.authenticate();
+	return new Response(String(user?.id));
+});
+console.log(await (res as Response).text());
+`,
+			},
+			false,
+		);
+		const types = run([process.execPath, tsc, "-p", "."], dir);
+		expect(types.output).toBe("");
+		expect(types.code).toBe(0);
+
+		const exec = run(["bun", "index.ts"], dir);
+		expect(exec.output.trim()).toBe("7");
+	}, 30_000);
+
 	test("main entry typechecks without @bunary/core installed", () => {
 		const dir = consumer("no-core", false, {
 			"index.ts": `

@@ -11,11 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The optional `@bunary/core` peer range is now `^1.0.0-rc.1` (was `^0.2.0`), which has `defineProvider` and `createToken` (#78)
 - `createJwtGuard` now verifies with [jose](https://github.com/panva/jose) `jwtVerify`, replacing the hand-written JWT parsing and HS256 verification. `secret` is optional now: pass exactly one of `secret`, `key` or `jwksUrl`. Invalid key configuration throws at construction (no or several key sources, empty `algorithms`, `none`, or an HMAC/asymmetric mismatch between the key source and `algorithms`) (#76)
-- `@bunary/http` is now a required peer dependency. `createAuth` is typed against its `Middleware`/`RequestContext`, and auth's own duplicated context and middleware types are gone (#76)
 - Removed the global singleton helpers `auth`, `setAuthManager`, `getAuthManager` and `clearAuthManager`. Use `createAuth()` or `createAuthManager().createContext({ request })` (#76)
 - Removed `installAuthPlugin` together with the `AuthPlugin`, `AuthPluginRouter` and `InstallableAuthManager` types. `createAuthManager` now returns `AuthManagerInterface` and no longer has an internal `_guards` property (#76)
 - Removed `createCookieStorage` (auth's own cookie parsing and serialisation) and the `AuthStorage` type (#76)
 - `AuthContext.logout()` now returns a promise and takes an optional guard name. It calls the guard's `logout()` (the session guard clears its cookie, the Basic guard throws because it is stateless) before clearing the request's user (#77)
+
+### Changed
+
+- `@bunary/auth` no longer requires any other bunary package: `@bunary/http` is no longer a peer dependency (reversing #55/#76), and nothing in `src/` or the shipped `.d.ts` imports it. `createAuth()`, `authMiddleware()` and `requireAuth()` now return auth's own `AuthMiddleware<Ctx>` over the new structural `AuthRequestContext` (`request`, optional `cookies`, `locals`, optional `app`), with `AuthCookieJar` (`CookieJar` is kept as an alias) and `AuthHandlerResult`; `@bunary/auth/provider` adds `AuthAppRequestContext`. http's `RequestContext` and `app.use()` accept them without casts. `requireAuth()`'s 401 problem response is now always built by auth (the provider entry no longer imports `@bunary/http` at runtime to look for `problem()`, which http 0.3 does not have). `@bunary/core` stays an optional peer used only by `@bunary/auth/provider` (#84)
 
 ### Added
 
