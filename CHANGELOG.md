@@ -14,12 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `createJwtGuard` throws on an empty secret and no longer leaves the key-import promise unobserved (#63)
+- `createJwtGuard` rejects a token at exactly `exp` (`now >= exp + clockToleranceSeconds`), as RFC 7519 requires (#43)
 
 ### Changed
 
 - The internal `_guards` map on the object returned by `createAuthManager` is now non-enumerable, so `Object.keys(manager)` and spreads only show `guard` and `createContext`; `installAuthPlugin` is unaffected (#46)
 - Basic guard docs and JSDoc example verify passwords with `Bun.password.verify` against a stored hash instead of a plaintext comparison (#46)
 - **Breaking:** JWTs without `exp` are now rejected by default; pass `requireExp: false` to keep the old behaviour (#63)
+- **Breaking:** the default `createJwtGuard` user mapping no longer copies registered claims (`iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`) onto the user; it returns `{ id: sub }` plus custom claims. Use `mapUser` to keep them (#43)
 
 ## [0.2.0] - 2026-09-21
 

@@ -137,7 +137,7 @@ If a plugin defines `routes` (e.g. OAuth callbacks), you must pass a router (an 
 
 ## Built-in Guards
 
-**JWT Bearer:** `createJwtGuard({ secret, issuer?, audience?, clockToleranceSeconds?, requireExp?, mapUser? })`. HS256 verification. An empty `secret` throws at construction. `requireExp` (default `true`) rejects validly signed tokens that have no `exp` claim; set `requireExp: false` to allow non-expiring tokens.
+**JWT Bearer:** `createJwtGuard({ secret, issuer?, audience?, clockToleranceSeconds?, requireExp?, mapUser? })`. HS256 verification. An empty `secret` throws at construction. `requireExp` (default `true`) rejects validly signed tokens that have no `exp` claim; set `requireExp: false` to allow non-expiring tokens. A token is rejected once `now >= exp + clockToleranceSeconds` (so a token at exactly `exp` is already expired, per RFC 7519) and while `now < nbf - clockToleranceSeconds`. Only `alg: "HS256"` is accepted; `none`, `RS256` and other algorithms are rejected. Without `mapUser`, the user is `{ id: sub, ...customClaims }`: the registered claims `iss`, `sub`, `aud`, `exp`, `nbf`, `iat` and `jti` are not copied onto the user (pass a `mapUser` if you need them).
 
 **Basic Auth:** `createBasicGuard({ name?, verify(username, password, request) })`. Use with `createAuthManager` or `createAuth`. Never compare plaintext passwords in `verify`; store hashes (e.g. from `Bun.password.hash`) and check them with `Bun.password.verify`:
 

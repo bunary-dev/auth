@@ -43,7 +43,9 @@ export interface JwtGuardOptions {
 
 	/**
 	 * Function to map JWT payload to AuthUser.
-	 * Defaults to `{ id: payload.sub, ...payload }` if sub is present.
+	 * Defaults to `{ id: payload.sub, ...customClaims }` if sub is present, where
+	 * customClaims are the payload claims other than the registered ones
+	 * (`iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`).
 	 *
 	 * @param payload - The decoded JWT payload
 	 * @returns The authenticated user or null if mapping fails
@@ -186,7 +188,7 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 			}
 			if (payload.exp !== undefined) {
 				const exp = typeof payload.exp === "number" ? payload.exp : null;
-				if (exp === null || now() > exp + clockTolerance) {
+				if (exp === null || now() >= exp + clockTolerance) {
 					return null;
 				}
 			}
@@ -237,16 +239,22 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 				}
 			}
 
-			// Default mapping: use sub as id, spread rest of payload
-			// Spread payload first, then set id last to ensure sub always wins
+			// Default mapping: use sub as id, plus non-registered claims
+			// Set id last to ensure sub always wins over a payload `id` claim
 			if (payload.sub !== undefined) {
 				const sub = payload.sub;
 				// Validate sub is a string or number
 				if (typeof sub !== "string" && typeof sub !== "number") {
 					return null;
 				}
+				const claims: Record<string, unknown> = {};
+				for (const [key, value] of Object.entries(payload)) {
+					if (!REGISTERED_CLAIMS.has(key)) {
+						claims[key] = value;
+					}
+				}
 				return {
-					...payload,
+					...claims,
 					id: sub,
 				} as AuthUser;
 			}
@@ -256,6 +264,19 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 		},
 	};
 }
+
+/**
+ * RFC 7519 registered claim names, excluded from the default user mapping.
+ */
+const REGISTERED_CLAIMS = new Set([
+	"iss",
+	"sub",
+	"aud",
+	"exp",
+	"nbf",
+	"iat",
+	"jti",
+]);
 
 /**
  * Check that a parsed JSON value is a non-null, non-array object.
