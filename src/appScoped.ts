@@ -1,29 +1,32 @@
-import type { HandlerResponse, Middleware, RequestContext } from "@bunary/http";
 import { createCookieJar, withSetCookies } from "./cookies.js";
 import { createAuthManager } from "./manager.js";
 import type {
 	AuthConfig,
 	AuthContext,
+	AuthHandlerResult,
 	AuthManagerInterface,
-	CookieJar,
+	AuthMiddleware,
+	AuthRequestContext,
 } from "./types.js";
 
 /**
- * Create app-scoped authentication middleware for `@bunary/http`.
+ * Create app-scoped authentication middleware.
  *
  * This factory creates a middleware function that attaches an `AuthContext`
  * to `ctx.locals.auth` for each request. This allows multiple apps in the
  * same process to have different auth configurations without global state.
  *
- * Guards that write cookies (the session guard) use `ctx.cookies` when
- * `@bunary/http` provides it. Otherwise the middleware keeps its own
+ * The middleware is typed against auth's own {@link AuthRequestContext}, so it
+ * works with `@bunary/http`'s `app.use()` and with any other object of that
+ * shape. Guards that write cookies (the session guard) use `ctx.cookies`
+ * when the context provides it. Otherwise the middleware keeps its own
  * per-request jar and appends the queued `Set-Cookie` headers to the
  * response returned by `next()`.
  *
  * @typeParam TLocals - Shape of `ctx.locals`, matching `createApp<TLocals>()`.
  *   Use `AuthLocals` (or a type extending it) to get a typed `ctx.locals.auth`.
  * @param config - Authentication configuration (guards and default guard)
- * @returns `@bunary/http` middleware that attaches auth context to each request
+ * @returns Middleware that attaches auth context to each request
  *
  * @example
  * ```ts
@@ -49,9 +52,9 @@ import type {
  */
 export function createAuth<TLocals extends object = Record<string, unknown>>(
 	config: AuthConfig,
-): Middleware<TLocals> {
+): AuthMiddleware<AuthRequestContext<TLocals>> {
 	const manager = createAuthManager(config);
-	return authContextMiddleware<TLocals>(() => manager);
+	return authContextMiddleware<AuthRequestContext<TLocals>>(() => manager);
 }
 
 /**
@@ -63,24 +66,24 @@ export function createAuth<TLocals extends object = Record<string, unknown>>(
  *
  * @internal
  */
-export function authContextMiddleware<TLocals extends object>(
-	resolveManager: (ctx: RequestContext<TLocals>) => AuthManagerInterface,
+export function authContextMiddleware<Ctx extends AuthRequestContext<object>>(
+	resolveManager: (ctx: Ctx) => AuthManagerInterface,
 	before?: (
 		auth: AuthContext,
 		locals: Record<string, unknown>,
-	) => Promise<HandlerResponse | undefined>,
-): Middleware<TLocals> {
+	) => Promise<AuthHandlerResult | undefined>,
+): AuthMiddleware<Ctx> {
 	return async (ctx, next) => {
 		const manager = resolveManager(ctx);
 
-		// @bunary/http >= 1.0 provides ctx.cookies and appends its Set-Cookie headers
-		const httpCookies = (ctx as { cookies?: CookieJar }).cookies;
-		const fallback = httpCookies ? undefined : createCookieJar(ctx.request);
+		// A framework jar (e.g. @bunary/http >= 1.0's) appends its own Set-Cookie headers
+		const ctxCookies = ctx.cookies;
+		const fallback = ctxCookies ? undefined : createCookieJar(ctx.request);
 
 		// Attach a request-scoped auth context to locals (per-request storage)
 		const auth = manager.createContext({
 			request: ctx.request,
-			cookies: httpCookies ?? fallback,
+			cookies: ctxCookies ?? fallback,
 		});
 		const locals = ctx.locals as Record<string, unknown>;
 		locals.auth = auth;

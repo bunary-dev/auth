@@ -2,8 +2,8 @@ import { EncryptJWT, jwtDecrypt } from "jose";
 import { createCookieJar, isCookieName, isCookiePath } from "../cookies.js";
 import type {
 	AttemptResult,
+	AuthCookieJar,
 	AuthUser,
-	CookieJar,
 	CookieOptions,
 	Credentials,
 	Guard,
@@ -137,7 +137,10 @@ export function createSessionGuard(options: SessionGuardOptions): Guard {
 		path,
 	};
 
-	function jarFor(input: GuardInput | undefined, request: Request): CookieJar {
+	function jarFor(
+		input: GuardInput | undefined,
+		request: Request,
+	): AuthCookieJar {
 		return input?.cookies ?? createCookieJar(request);
 	}
 

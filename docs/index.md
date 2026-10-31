@@ -1,16 +1,18 @@
 # @bunary/auth
 
-Guard-based authentication for the Bunary framework: a cookie session guard and a JWT guard built on [jose](https://github.com/panva/jose), a Basic guard, user providers, and `@bunary/http` middleware that attaches a request-scoped auth context to `ctx.locals.auth`.
+Guard-based authentication for the Bunary framework: a cookie session guard and a JWT guard built on [jose](https://github.com/panva/jose), a Basic guard, user providers, and middleware that attaches a request-scoped auth context to `ctx.locals.auth`.
 
 Requires Bun ≥ 1.4.0.
 
 ## Installation
 
 ```bash
-bun add @bunary/auth @bunary/http
+bun add @bunary/auth
 ```
 
-`@bunary/http` is a required peer dependency. `jose` is installed automatically as a dependency. `@bunary/core` (≥ 1.0.0-rc.1) is an optional peer dependency, needed only for [`@bunary/auth/provider`](#using-with-bunarycore).
+`@bunary/auth` has no required bunary dependencies: its only dependency is `jose`, installed automatically. The middleware is typed against auth's own small [structural types](#structural-types-authrequestcontext-authcookiejar-authmiddleware), so it works with `@bunary/http` (see [Using with @bunary/http](#using-with-bunaryhttp)) or with any context of the same shape, without importing http. `@bunary/core` (≥ 1.0.0-rc.1) is an optional peer dependency, needed only for [`@bunary/auth/provider`](#using-with-bunarycore).
+
+The Quick Start uses `@bunary/http`; install it alongside: `bun add @bunary/auth @bunary/http`.
 
 ## Quick Start
 
@@ -52,7 +54,7 @@ There is no global auth singleton: each app creates its own middleware, so sever
 
 ## Middleware: `createAuth(config)`
 
-`createAuth<TLocals>(config)` returns an `@bunary/http` `Middleware<TLocals>` that creates a fresh `AuthContext` for every request and stores it on `ctx.locals.auth` before calling `next()`. It does not authenticate by itself; call `ctx.locals.auth.authenticate()` where you need a user.
+`createAuth<TLocals>(config)` returns an `AuthMiddleware<AuthRequestContext<TLocals>>` (assignable to `@bunary/http`'s `Middleware<TLocals>`) that creates a fresh `AuthContext` for every request and stores it on `ctx.locals.auth` before calling `next()`. It does not authenticate by itself; call `ctx.locals.auth.authenticate()` where you need a user.
 
 `config` is an `AuthConfig`:
 
@@ -70,7 +72,69 @@ app.use(createAuth<Locals>(config));
 
 With an untyped `createApp()`, `createAuth(config)` works too; read `ctx.locals.auth as AuthContext`.
 
-Guards that write cookies (the [session guard](#session-guard-createsessionguardoptions)) use `ctx.cookies` when `@bunary/http` provides it (http ≥ 1.0). With `@bunary/http` 0.3, which has no `ctx.cookies`, the middleware keeps its own per-request [cookie jar](#cookies) and appends its `Set-Cookie` headers to the response that `next()` returns. That includes immutable responses such as `Response.redirect()`, which are copied, and plain-object, string or `null` results, which are converted the way `@bunary/http` converts them.
+Guards that write cookies (the [session guard](#session-guard-createsessionguardoptions)) use `ctx.cookies` when the context provides one (as `@bunary/http` ≥ 1.0 is planned to). Without `ctx.cookies` (e.g. `@bunary/http` 0.3), the middleware keeps its own per-request [cookie jar](#cookies) and appends its `Set-Cookie` headers to the response that `next()` returns. That includes immutable responses such as `Response.redirect()`, which are copied, and plain-object, string or `null` results, which are converted the way `@bunary/http` converts them.
+
+### Structural types: `AuthRequestContext`, `AuthCookieJar`, `AuthMiddleware`
+
+Auth declares only the members it uses, so any object of the right shape fits, and nothing in auth imports `@bunary/http`:
+
+```ts
+interface AuthRequestContext<TLocals extends object = Record<string, unknown>> {
+  request: Request;
+  cookies?: AuthCookieJar; // optional: without it auth uses its own jar
+  locals: TLocals;         // auth sets locals.auth (and locals.user)
+  app?: unknown;           // a core Application for @bunary/auth/provider
+}
+
+interface AuthCookieJar {
+  get(name: string): string | undefined;
+  set(name: string, value: string, options?: CookieOptions): void;
+  delete(name: string, options?: CookieOptions): void;
+}
+
+type AuthHandlerResult = Response | object | string | number | null | undefined;
+
+type AuthMiddleware<Ctx extends AuthRequestContext<object> = AuthRequestContext> =
+  (ctx: Ctx, next: () => Promise<AuthHandlerResult>) => Promise<AuthHandlerResult>;
+```
+
+`next()` and the middleware's result use `AuthHandlerResult` (the same union as `@bunary/http`'s `HandlerResponse`) rather than `Response`, so the middleware is assignable to http's `Middleware`, whose `next()` may resolve to a plain object or string. `CookieJar` is an alias of `AuthCookieJar`.
+
+Without any framework, call the middleware with a plain object:
+
+```ts
+import { createAuth, type AuthLocals, type AuthRequestContext } from "@bunary/auth";
+
+const middleware = createAuth<AuthLocals>(config);
+const ctx: AuthRequestContext<AuthLocals> = { request, cookies: myJar, locals: {} as AuthLocals };
+const response = await middleware(ctx, async () => {
+  const user = await ctx.locals.auth.authenticate();
+  return new Response(user ? "hello" : "who?");
+});
+```
+
+## Using with @bunary/http
+
+`@bunary/http`'s `RequestContext` and `Middleware` are structurally compatible with auth's types, so `app.use()` (or `router.use()`) takes auth's middleware directly, with no casts:
+
+```ts
+import { createApp } from "@bunary/http";
+import { createAuth, createSessionGuard, type AuthLocals } from "@bunary/auth";
+
+const app = createApp<AuthLocals>();
+app.use(
+  createAuth<AuthLocals>({
+    defaultGuard: "session",
+    guards: { session: createSessionGuard({ provider: users, secret: process.env.SESSION_KEY! }) },
+  }),
+);
+app.post("/login", async (ctx) => {
+  const ok = await ctx.locals.auth.attempt(await ctx.json());
+  return ok ? { id: ok.user.id } : new Response(null, { status: 401 });
+});
+```
+
+The same holds for `authMiddleware()` and `requireAuth()` from [`@bunary/auth/provider`](#using-with-bunarycore). Tested against `@bunary/http` 0.3, which has no `ctx.cookies` or `ctx.app`: auth then appends the session cookie to the response itself, and the provider middleware needs `{ app }`. A future `ctx.cookies` jar whose options type has more attributes than `CookieOptions` still fits `AuthCookieJar`.
 
 ### AuthContext methods
 
@@ -88,7 +152,7 @@ Guards that write cookies (the [session guard](#session-guard-createsessionguard
 
 ## Standalone: `createAuthManager(config)`
 
-Outside `@bunary/http`, use the manager directly:
+Without middleware, use the manager directly:
 
 ```ts
 import { createAuthManager, createJwtGuard } from "@bunary/auth";
@@ -359,17 +423,17 @@ The Basic guard is stateless: credentials come with every request. `attempt({ us
 
 ## Cookies
 
-The session guard reads and writes cookies through a `CookieJar`:
+The session guard reads and writes cookies through an `AuthCookieJar` (also exported as `CookieJar`):
 
 ```ts
-interface CookieJar {
+interface AuthCookieJar {
   get(name: string): string | undefined;
   set(name: string, value: string, options?: CookieOptions): void;
   delete(name: string, options?: CookieOptions): void;
 }
 ```
 
-`@bunary/http`'s `ctx.cookies` has this shape, and `createAuth()` passes it through when it exists. `createCookieJar(request)` creates a jar backed by Bun's `Bun.CookieMap` and `Bun.Cookie`. Its `headers()` method returns the queued `Set-Cookie` values. `set()` and `delete()` throw for names that are not RFC 6265 tokens. Use it with `createAuthManager()` outside `@bunary/http`:
+Any object with these methods works (e.g. a framework's `ctx.cookies`), and `createAuth()` passes `ctx.cookies` through when it exists. `createCookieJar(request)` creates a jar backed by Bun's `Bun.CookieMap` and `Bun.Cookie`. Its `headers()` method returns the queued `Set-Cookie` values. `set()` and `delete()` throw for names that are not RFC 6265 tokens. Use it with `createAuthManager()` when you have no framework jar:
 
 ```ts
 import { createCookieJar } from "@bunary/auth";
@@ -401,7 +465,7 @@ interface Guard {
 
 ## Using with @bunary/core
 
-`@bunary/auth/provider` wires auth into a `@bunary/core` application. It is a separate entry point because it imports `@bunary/core`; the main `@bunary/auth` entry never does, so apps without core typecheck and run without it.
+`@bunary/auth/provider` wires auth into a `@bunary/core` application. It is a separate entry point because it imports `@bunary/core`; the main `@bunary/auth` entry never does (at runtime or in its types), so apps without core typecheck and run without it.
 
 ```bash
 bun add @bunary/auth @bunary/http @bunary/core
@@ -436,7 +500,7 @@ const manager = app.get(AuthToken); // AuthManagerInterface
 
 ### Middleware: `authMiddleware()` and `requireAuth()`
 
-Both resolve the manager from the app at request time, authenticate the request with the default guard (or `guard`), and set `ctx.locals.auth` (the request's `AuthContext`) and `ctx.locals.user`:
+Both return an `AuthMiddleware<AuthAppRequestContext<TLocals>>`, where `AuthAppRequestContext` is an `AuthRequestContext` whose optional `app` is a core `Application` (http's `RequestContext` fits). Both resolve the manager from the app at request time, authenticate the request with the default guard (or `guard`), and set `ctx.locals.auth` (the request's `AuthContext`) and `ctx.locals.user`:
 
 | Middleware | Guest | `ctx.locals` type |
 | --- | --- | --- |
@@ -460,13 +524,13 @@ Options (`AuthMiddlewareOptions`):
 - `guard` — guard name; defaults to `auth.defaultGuard`
 - `app` — the core `Application` to resolve `AuthToken` from. Defaults to `ctx.app`, which `@bunary/http` ≥ 1.0 sets for routers mounted with `httpProvider()`. With `@bunary/http` 0.3, pass it: `app.use(requireAuth({ app }))`.
 
-The 401 body is `{ "type": "about:blank", "title": "Unauthorized", "status": 401 }` with `Content-Type: application/problem+json; charset=utf-8`, produced by `@bunary/http`'s `problem(401)` when http has it (≥ 1.0) and by an identical built-in response with http 0.3. A request throws when no app is available or the app was not booted with `authProvider` (core's `MissingBindingError`). Errors thrown by a guard are not caught. Cookies written by guards are handled as in [`createAuth()`](#middleware-createauthconfig).
+The 401 body is `{ "type": "about:blank", "title": "Unauthorized", "status": 401 }` with `Content-Type: application/problem+json; charset=utf-8`, built by auth itself (it does not call into `@bunary/http`). A request throws when no app is available or the app was not booted with `authProvider` (core's `MissingBindingError`). Errors thrown by a guard are not caught. Cookies written by guards are handled as in [`createAuth()`](#middleware-createauthconfig).
 
 ## Types
 
-Exported types: `AttemptResult`, `AuthConfig`, `AuthContext`, `AuthLocals`, `AuthManagerInterface`, `AuthUser`, `CookieJar`, `CookieOptions`, `Credentials`, `Guard`, `GuardInput`, `QueuedCookieJar`, `UserProvider`, `JwtGuardOptions`, `SessionGuardOptions`, `BasicGuardOptions`.
+Exported types: `AttemptResult`, `AuthConfig`, `AuthContext`, `AuthCookieJar`, `AuthHandlerResult`, `AuthLocals`, `AuthManagerInterface`, `AuthMiddleware`, `AuthRequestContext`, `AuthUser`, `CookieJar`, `CookieOptions`, `Credentials`, `Guard`, `GuardInput`, `QueuedCookieJar`, `UserProvider`, `JwtGuardOptions`, `SessionGuardOptions`, `BasicGuardOptions`.
 
-From `@bunary/auth/provider`: `AuthMiddlewareOptions`, `AuthUserLocals`, `RequiredAuthLocals` (both take an optional user type parameter), plus the `BunaryConfig` augmentation.
+From `@bunary/auth/provider`: `AuthAppRequestContext`, `AuthMiddlewareOptions`, `AuthUserLocals`, `RequiredAuthLocals` (both take an optional user type parameter), plus the `BunaryConfig` augmentation.
 
 ## Removed in this release
 

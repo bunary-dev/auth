@@ -61,7 +61,6 @@
     "jose": "^6.2.14"
   },
   "peerDependencies": {
-    "@bunary/http": "^0.3.0",
     "@bunary/core": "^1.0.0-rc.1"
   },
   "peerDependenciesMeta": {
