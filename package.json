@@ -17,6 +17,11 @@
       "import": "./dist/provider.js",
       "default": "./dist/provider.js"
     },
+    "./orm": {
+      "types": "./dist/orm.d.ts",
+      "import": "./dist/orm.js",
+      "default": "./dist/orm.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -26,7 +31,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/provider.ts --outdir ./dist --target bun --splitting --packages external && tsc -p tsconfig.build.json",
+    "build": "bun build ./src/index.ts ./src/provider.ts ./src/orm.ts --outdir ./dist --target bun --splitting --packages external && tsc -p tsconfig.build.json",
     "test": "bun test",
     "lint": "biome check ./src ./tests",
     "format": "biome check --write ./src ./tests",
@@ -62,10 +67,18 @@
   },
   "peerDependencies": {
     "@bunary/http": "^0.3.0",
-    "@bunary/core": "^1.0.0-rc.1"
+    "@bunary/core": "^1.0.0-rc.1",
+    "@bunary/orm": "^0.2.0",
+    "drizzle-orm": "^0.45.0"
   },
   "peerDependenciesMeta": {
     "@bunary/core": {
+      "optional": true
+    },
+    "@bunary/orm": {
+      "optional": true
+    },
+    "drizzle-orm": {
       "optional": true
     }
   },
@@ -73,7 +86,9 @@
     "@biomejs/biome": "2.6.3",
     "@bunary/core": "file:./vendor/bunary-core-1.0.0-rc.2.tgz",
     "@bunary/http": "^0.3.0",
+    "@bunary/orm": "file:./vendor/bunary-orm-0.2.0.tgz",
     "@types/bun": "^1.4.2",
+    "drizzle-orm": "^0.45.4",
     "typescript": "^7.0.2"
   }
 }

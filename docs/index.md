@@ -10,7 +10,7 @@ Requires Bun ≥ 1.4.0.
 bun add @bunary/auth @bunary/http
 ```
 
-`@bunary/http` is a required peer dependency. `jose` is installed automatically as a dependency. `@bunary/core` (≥ 1.0.0-rc.1) is an optional peer dependency, needed only for [`@bunary/auth/provider`](#using-with-bunarycore).
+`@bunary/http` is a required peer dependency. `jose` is installed automatically as a dependency. `@bunary/core` (≥ 1.0.0-rc.1) is an optional peer dependency, needed only for [`@bunary/auth/provider`](#using-with-bunarycore). `@bunary/orm` (≥ 0.2) and `drizzle-orm` are optional peers, needed only for [`@bunary/auth/orm`](#bunaryorm-models-ormuserprovidermodel-options).
 
 ## Quick Start
 
@@ -153,6 +153,67 @@ const provider: UserProvider<User> = {
 ```
 
 The user object the provider returns becomes `auth.user()`. Strip fields such as `passwordHash` in `retrieveById` if handlers shouldn't see them.
+
+### `@bunary/orm` models: `ormUserProvider(Model, options?)`
+
+`@bunary/auth/orm` exports a ready-made provider backed by an [`@bunary/orm`](https://github.com/bunary-dev/orm) model (`defineModel()`, `@bunary/orm` ≥ 0.2). `@bunary/orm` and `drizzle-orm` are optional peers: install them to use this subpath.
+
+```bash
+bun add @bunary/orm drizzle-orm
+```
+
+```ts
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { createApp } from "@bunary/http";
+import { defineModel } from "@bunary/orm";
+import { type AuthLocals, createAuth, createSessionGuard } from "@bunary/auth";
+import { ormUserProvider } from "@bunary/auth/orm";
+
+const users = sqliteTable("users", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  email: text().notNull().unique(),
+  password: text().notNull(), // a Bun.password.hash() hash
+});
+
+// `hidden` keeps the hash out of toJSON(), and so out of JSON responses
+const User = defineModel(drizzle({ client: new Database("app.sqlite") }), users, {
+  hidden: ["password"],
+});
+
+await User.create({ email: "ada@example.com", password: await Bun.password.hash("correct horse") });
+
+const app = createApp<AuthLocals>();
+app.use(createAuth<AuthLocals>({
+  defaultGuard: "session",
+  guards: {
+    session: createSessionGuard({
+      provider: ormUserProvider(User), // { identifier: "email", password: "password" }
+      secret: process.env.SESSION_SECRET!,
+    }),
+  },
+}));
+
+app.post("/login", async (ctx) => {
+  const { email, password } = await ctx.request.json();
+  const ok = await ctx.locals.auth.attempt({ email, password }); // writes the session cookie
+  return ok ? { user: ok.user } : new Response("Invalid credentials", { status: 401 }); // no password in the JSON
+});
+```
+
+| Option       | Default      | Description                                                        |
+| ------------ | ------------ | ------------------------------------------------------------------ |
+| `identifier` | `"email"`    | Column users are looked up by, and the credentials key holding its value |
+| `password`   | `"password"` | Column holding the password hash, and the credentials key holding the plain password |
+
+- `retrieveById(id)` is `Model.find(id)`.
+- `retrieveByCredentials(credentials)` is `Model.where(eq(table[identifier], credentials[identifier])).first()`. Only the identifier is matched, never the password column. A missing identifier, or one that is not a string, number or bigint, returns `null` without a query.
+- `validateCredentials(user, credentials)` is `Bun.password.verify(credentials[password], user[password])`. It is `false` when the password is missing or not a string, or the stored value is not a valid hash.
+
+Both options are column keys (JS keys) of the model's table: anything else is a type error, and `ormUserProvider()` throws (`ormUserProvider: identifier "login" is not a column of "users"`), as it does when both name the same column. Users are model instances, so `auth.user()` has the model's methods and columns. A `hidden` column is left out of JSON only and can still be read in code (`user.password`).
+
+Importing `@bunary/auth/orm` without `@bunary/orm` installed throws `@bunary/auth/orm requires @bunary/orm, which is not installed. Install it with: bun add @bunary/orm` (likewise for `drizzle-orm`). The main `@bunary/auth` entry never imports either package.
 
 ## Session guard: `createSessionGuard(options)`
 
@@ -467,6 +528,8 @@ The 401 body is `{ "type": "about:blank", "title": "Unauthorized", "status": 401
 Exported types: `AttemptResult`, `AuthConfig`, `AuthContext`, `AuthLocals`, `AuthManagerInterface`, `AuthUser`, `CookieJar`, `CookieOptions`, `Credentials`, `Guard`, `GuardInput`, `QueuedCookieJar`, `UserProvider`, `JwtGuardOptions`, `SessionGuardOptions`, `BasicGuardOptions`.
 
 From `@bunary/auth/provider`: `AuthMiddlewareOptions`, `AuthUserLocals`, `RequiredAuthLocals` (both take an optional user type parameter), plus the `BunaryConfig` augmentation.
+
+From `@bunary/auth/orm`: `OrmUserProviderOptions`, `OrmUserModel` (the parts of a model the provider uses), `OrmUser` (a model's instance type as an auth user) and `OrmColumnKey`.
 
 ## Removed in this release
 
