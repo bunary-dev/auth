@@ -184,6 +184,12 @@ export interface AuthConfig {
 
 	/** Named guards available for authentication */
 	guards: Record<string, Guard>;
+
+	/**
+	 * The app's user provider, returned by `manager.provider()`.
+	 * Guards still take their provider in their own options.
+	 */
+	provider?: UserProvider;
 }
 
 /**
@@ -299,6 +305,13 @@ export interface AuthManagerInterface {
 	 * @throws If the guard doesn't exist
 	 */
 	guard(name?: string): Guard;
+
+	/**
+	 * Get the user provider from `AuthConfig.provider`.
+	 *
+	 * @throws If the config has no `provider`
+	 */
+	provider(): UserProvider;
 
 	/**
 	 * Create a request-scoped AuthContext.

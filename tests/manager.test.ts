@@ -44,11 +44,12 @@ describe("AuthManager", () => {
 			expect(typeof authManager.createContext).toBe("function");
 		});
 
-		test("exposes only guard and createContext", () => {
+		test("exposes only guard, provider and createContext", () => {
 			const authManager = createAuthManager(createConfig());
 			expect(Object.keys(authManager).sort()).toEqual([
 				"createContext",
 				"guard",
+				"provider",
 			]);
 			expect(authManager).not.toHaveProperty("_guards");
 		});
