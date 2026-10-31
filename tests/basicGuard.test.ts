@@ -172,9 +172,13 @@ describe("createBasicGuard", () => {
 	});
 
 	test("works with synchronous verify function", async () => {
+		const passwordHash = Bun.password.hashSync("admin");
 		const guard = createBasicGuard({
 			verify: (username, password) => {
-				if (username === "admin" && password === "admin") {
+				if (
+					username === "admin" &&
+					Bun.password.verifySync(password, passwordHash)
+				) {
 					return { id: 1, username };
 				}
 				return null;

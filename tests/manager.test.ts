@@ -44,15 +44,13 @@ describe("AuthManager", () => {
 			expect(typeof authManager.createContext).toBe("function");
 		});
 
-		test("does not expose internal _guards as an enumerable key", () => {
+		test("exposes only guard and createContext", () => {
 			const authManager = createAuthManager(createConfig());
-			expect(Object.keys(authManager)).not.toContain("_guards");
 			expect(Object.keys(authManager).sort()).toEqual([
 				"createContext",
 				"guard",
 			]);
-			expect({ ...authManager }).not.toHaveProperty("_guards");
-			expect(authManager._guards).toBeInstanceOf(Map);
+			expect(authManager).not.toHaveProperty("_guards");
 		});
 	});
 

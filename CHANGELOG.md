@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- `createJwtGuard` now verifies with [jose](https://github.com/panva/jose) `jwtVerify`, replacing the hand-written JWT parsing and HS256 verification. `secret` is optional now: pass exactly one of `secret`, `key` or `jwksUrl`. Invalid key configuration throws at construction (no or several key sources, empty `algorithms`, `none`, or an HMAC/asymmetric mismatch between the key source and `algorithms`) (#76)
+- `@bunary/http` is now a required peer dependency. `createAuth` is typed against its `Middleware`/`RequestContext`, and auth's own duplicated context and middleware types are gone (#76)
+- Removed the global singleton helpers `auth`, `setAuthManager`, `getAuthManager` and `clearAuthManager`. Use `createAuth()` or `createAuthManager().createContext({ request })` (#76)
+- Removed `installAuthPlugin` together with the `AuthPlugin`, `AuthPluginRouter` and `InstallableAuthManager` types. `createAuthManager` now returns `AuthManagerInterface` and no longer has an internal `_guards` property (#76)
+- Removed `createCookieStorage` (auth's own cookie parsing and serialisation) and the `AuthStorage` type (#76)
+
 ### Added
 
+- `createJwtGuard` options `algorithms` (default `["HS256"]` with `secret`), `key` (public `CryptoKey`/`KeyObject`/JWK) and `jwksUrl` (verified through jose's `createRemoteJWKSet` and its cache), so RS256, PS256, ES256 and EdDSA tokens can be verified; HS384/HS512 work with `secret` (#76)
+- `AuthLocals` type and a `createAuth<TLocals>()` type parameter, giving a typed `ctx.locals.auth` with `createApp<AuthLocals>()` (#76)
+- `jose` is a direct dependency; `@bunary/core` is declared as an optional peer dependency (#76)
 - `requireExp` option on `createJwtGuard` (default `true`): tokens without an `exp` claim are rejected (#63)
 
 ### Fixed
