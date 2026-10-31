@@ -20,6 +20,93 @@ export interface AuthUser {
 }
 
 /**
+ * Credentials passed to `attempt()`, e.g. `{ email, password }`.
+ *
+ * The shape is up to your user provider (or, for the Basic guard,
+ * `{ username, password }`).
+ */
+export type Credentials = Record<string, unknown>;
+
+/**
+ * Looks users up for guards that log users in (Laravel's `UserProvider`).
+ *
+ * @example
+ * ```ts
+ * interface User extends AuthUser { email: string; passwordHash: string }
+ * // passwordHash from `await Bun.password.hash(password)`
+ * const users = new Map<number, User>([[1, { id: 1, email: "ada@example.com", passwordHash }]]);
+ *
+ * const provider: UserProvider<User> = {
+ *   retrieveById: (id) => users.get(Number(id)) ?? null,
+ *   retrieveByCredentials: (c) =>
+ *     [...users.values()].find((u) => u.email === c.email) ?? null,
+ *   validateCredentials: (user, c) =>
+ *     typeof c.password === "string" &&
+ *     Bun.password.verify(c.password, user.passwordHash),
+ * };
+ * ```
+ */
+export interface UserProvider<TUser extends AuthUser = AuthUser> {
+	/** Find a user by their identifier, or return null. */
+	retrieveById(id: AuthUser["id"]): Promise<TUser | null> | TUser | null;
+
+	/**
+	 * Find a user matching the credentials, ignoring the password
+	 * (e.g. look up by email). Return null if there is none.
+	 */
+	retrieveByCredentials(
+		credentials: Credentials,
+	): Promise<TUser | null> | TUser | null;
+
+	/** Check the credentials (e.g. the password) against the user. */
+	validateCredentials(
+		user: TUser,
+		credentials: Credentials,
+	): Promise<boolean> | boolean;
+}
+
+/**
+ * Options accepted by `CookieJar.set()` / `CookieJar.delete()`.
+ *
+ * A subset of `@bunary/http`'s `CookieSerializeOptions`.
+ */
+export interface CookieOptions {
+	path?: string;
+	domain?: string;
+	maxAge?: number;
+	expires?: Date;
+	httpOnly?: boolean;
+	secure?: boolean;
+	sameSite?: "lax" | "strict" | "none";
+	partitioned?: boolean;
+}
+
+/**
+ * Per-request cookie access used by the session guard.
+ *
+ * Structurally compatible with `@bunary/http`'s `ctx.cookies` (`CookieJar`),
+ * so that jar can be passed straight through.
+ */
+export interface CookieJar {
+	/** Read a cookie from the request, or `undefined` if it was not sent. */
+	get(name: string): string | undefined;
+	/** Queue a `Set-Cookie` header for the response. */
+	set(name: string, value: string, options?: CookieOptions): void;
+	/** Queue a `Set-Cookie` header that expires the cookie. */
+	delete(name: string, options?: CookieOptions): void;
+}
+
+/**
+ * Result of a successful `attempt()`.
+ *
+ * `token` is set by guards that issue tokens (the JWT guard).
+ */
+export interface AttemptResult<TUser extends AuthUser = AuthUser> {
+	user: TUser;
+	token?: string;
+}
+
+/**
  * Authentication guard that validates requests and extracts user information.
  *
  * Guards are responsible for:
@@ -50,7 +137,31 @@ export interface Guard {
 	 * @param request - The incoming HTTP request
 	 * @returns The authenticated user or null if authentication fails
 	 */
-	authenticate(request: Request): Promise<AuthUser | null> | AuthUser | null;
+	authenticate(
+		request: Request,
+		input?: GuardInput,
+	): Promise<AuthUser | null> | AuthUser | null;
+
+	/**
+	 * Check credentials and log the user in. Return null when they don't match.
+	 * Optional; guards without it make `AuthContext.attempt()` throw.
+	 */
+	attempt?(
+		credentials: Credentials,
+		input: GuardInput,
+	): Promise<AttemptResult | null>;
+
+	/**
+	 * Log a known user in (write the session, or issue a token and return it).
+	 * Optional; guards without it make `AuthContext.login()` throw.
+	 */
+	login?(user: AuthUser, input: GuardInput): Promise<string | undefined>;
+
+	/**
+	 * Log the current user out (e.g. clear the session cookie).
+	 * Optional; without it `AuthContext.logout()` only clears the request's user.
+	 */
+	logout?(input: GuardInput): Promise<void> | void;
 }
 
 /**
@@ -84,6 +195,12 @@ export interface AuthConfig {
 export interface GuardInput {
 	/** The incoming HTTP request */
 	request: Request;
+
+	/**
+	 * Cookie jar for this request (e.g. `@bunary/http`'s `ctx.cookies`).
+	 * The manager creates one from the request when omitted.
+	 */
+	cookies?: CookieJar;
 }
 
 /**
@@ -116,14 +233,43 @@ export interface AuthContext {
 	check(): boolean;
 
 	/**
+	 * Returns true if the request is not authenticated.
+	 */
+	guest(): boolean;
+
+	/**
+	 * Look the user up by credentials and log them in with the guard
+	 * (session: writes the cookie; JWT: issues a token; Basic: this request only).
+	 *
+	 * @returns The user (and token, for the JWT guard), or false when the
+	 *   credentials don't match
+	 * @throws If the guard does not support `attempt()`
+	 */
+	attempt(
+		credentials: Credentials,
+		guardName?: string,
+	): Promise<AttemptResult | false>;
+
+	/**
+	 * Log a user in with the guard without checking credentials.
+	 *
+	 * @returns The issued token for the JWT guard, otherwise undefined
+	 * @throws If the guard does not support `login()` (e.g. the Basic guard)
+	 */
+	login(user: AuthUser, guardName?: string): Promise<string | undefined>;
+
+	/**
 	 * Get the authenticated user or throw.
 	 */
 	require(): AuthUser;
 
 	/**
-	 * Clear authentication state for this request.
+	 * Log out: let the guard clear its state (the session guard clears its
+	 * cookie), then clear the user for this request.
+	 *
+	 * @throws If the guard is stateless and has nothing to log out of (Basic)
 	 */
-	logout(): void;
+	logout(guardName?: string): Promise<void>;
 }
 
 /**

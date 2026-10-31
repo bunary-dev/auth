@@ -7,7 +7,9 @@ describe("package exports", () => {
 			"createAuth",
 			"createAuthManager",
 			"createBasicGuard",
+			"createCookieJar",
 			"createJwtGuard",
+			"createSessionGuard",
 		]);
 	});
 

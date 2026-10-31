@@ -1,4 +1,10 @@
-import type { AuthUser, Guard } from "../types.js";
+import type {
+	AttemptResult,
+	AuthUser,
+	Credentials,
+	Guard,
+	GuardInput,
+} from "../types.js";
 
 /**
  * Options for creating a Basic Auth guard.
@@ -29,6 +35,10 @@ export interface BasicGuardOptions {
  *
  * The guard extracts the username and password from the Basic Auth header
  * and calls the provided `verify` function to authenticate the user.
+ *
+ * The guard is stateless: `attempt({ username, password })` runs `verify`
+ * and authenticates the current request only, while `login()` and
+ * `logout()` throw because there is no session or token to write or clear.
  *
  * @param options - Guard configuration
  * @returns A guard that implements Basic Authentication
@@ -104,6 +114,30 @@ export function createBasicGuard(options: BasicGuardOptions): Guard {
 
 			// Call verify function
 			return await options.verify(username, password, request);
+		},
+
+		async attempt(
+			credentials: Credentials,
+			input: GuardInput,
+		): Promise<AttemptResult | null> {
+			const { username, password } = credentials;
+			if (typeof username !== "string" || typeof password !== "string") {
+				return null;
+			}
+			const user = await options.verify(username, password, input.request);
+			return user ? { user } : null;
+		},
+
+		async login(): Promise<never> {
+			throw new Error(
+				`Guard "${guardName}" is stateless (Basic auth): login() is not supported; credentials are sent with every request`,
+			);
+		},
+
+		logout(): never {
+			throw new Error(
+				`Guard "${guardName}" is stateless (Basic auth): logout() is not supported; there is no session to clear`,
+			);
 		},
 	};
 }

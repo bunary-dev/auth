@@ -1,6 +1,6 @@
 # @bunary/auth
 
-Guard-based authentication for the Bunary framework: a JWT guard built on [jose](https://github.com/panva/jose), a Basic guard, and `@bunary/http` middleware that attaches a request-scoped auth context to `ctx.locals.auth`.
+Guard-based authentication for the Bunary framework: a cookie session guard and a JWT guard built on [jose](https://github.com/panva/jose), a Basic guard, user providers, and `@bunary/http` middleware that attaches a request-scoped auth context to `ctx.locals.auth`.
 
 Requires Bun ≥ 1.4.0.
 
@@ -69,14 +69,21 @@ app.use(createAuth<Locals>(config));
 
 With an untyped `createApp()`, `createAuth(config)` works too; read `ctx.locals.auth as AuthContext`.
 
+Guards that write cookies (the [session guard](#session-guard-createsessionguardoptions)) use `ctx.cookies` when `@bunary/http` provides it (http ≥ 1.0). With `@bunary/http` 0.3, which has no `ctx.cookies`, the middleware keeps its own per-request [cookie jar](#cookies) and appends its `Set-Cookie` headers to the response that `next()` returns. That includes immutable responses such as `Response.redirect()`, which are copied, and plain-object, string or `null` results, which are converted the way `@bunary/http` converts them.
+
 ### AuthContext methods
 
 - `authenticate(guardName?)` — run the guard against the request and store the result on this context
 - `user()` — the authenticated user, or `null`
 - `check()` — `true` when a user is authenticated
+- `guest()` — `true` when no user is authenticated
+- `attempt(credentials, guardName?)` — check credentials and log the user in; resolves to `{ user, token? }`, or `false` when they don't match (see [Logging in and out](#logging-in-and-out))
+- `login(user, guardName?)` — log a user in without checking credentials; resolves to the token for the JWT guard, otherwise `undefined`
+- `logout(guardName?)` — let the guard log out (the session guard clears its cookie), then clear the user for this request. Returns a promise
 - `require()` — the user, or throws `Error("Unauthenticated")`
-- `logout()` — clear the user for this request
 - `guard(name?)` — get a guard by name (or the default guard)
+
+`attempt()`, `login()` and `logout()` act on the default guard unless you pass a guard name.
 
 ## Standalone: `createAuthManager(config)`
 
@@ -98,7 +105,141 @@ if (auth.check()) {
 ```
 
 - `guard(name?)` — get a guard by name or the default guard; throws for an unknown name
-- `createContext({ request })` — create a request-scoped `AuthContext` (safe under concurrency)
+- `createContext({ request, cookies? })` — create a request-scoped `AuthContext` (safe under concurrency). `cookies` is the request's [cookie jar](#cookies); when omitted, the context creates one from the request, which reads cookies but leaves you no way to send the ones it writes. Pass your own jar when you use the session guard.
+
+## User providers
+
+Guards that log users in look them up through a `UserProvider` (Laravel's `UserProvider`):
+
+```ts
+interface UserProvider<TUser extends AuthUser = AuthUser> {
+  retrieveById(id: string | number): Promise<TUser | null> | TUser | null;
+  retrieveByCredentials(credentials: Credentials): Promise<TUser | null> | TUser | null;
+  validateCredentials(user: TUser, credentials: Credentials): Promise<boolean> | boolean;
+}
+```
+
+- `retrieveById` — load a user by id. The session guard calls it on every authenticated request.
+- `retrieveByCredentials` — find the user the credentials refer to, ignoring the password (e.g. by email).
+- `validateCredentials` — check the credentials, typically the password, against that user.
+
+`Credentials` is `Record<string, unknown>`: whatever you pass to `attempt()`. An in-memory provider that stores only password hashes:
+
+```ts
+import type { AuthUser, UserProvider } from "@bunary/auth";
+
+interface User extends AuthUser {
+  id: number;
+  email: string;
+  passwordHash: string;
+}
+
+const users: User[] = [
+  { id: 1, email: "ada@example.com", passwordHash: await Bun.password.hash("correct horse") },
+];
+
+const provider: UserProvider<User> = {
+  retrieveById: (id) => users.find((u) => u.id === id) ?? null,
+  retrieveByCredentials: (credentials) =>
+    users.find((u) => u.email === credentials.email) ?? null,
+  async validateCredentials(user, credentials) {
+    if (typeof credentials.password !== "string") return false;
+    // Constant-time comparison against the argon2id/bcrypt hash
+    return await Bun.password.verify(credentials.password, user.passwordHash);
+  },
+};
+```
+
+The user object the provider returns becomes `auth.user()`. Strip fields such as `passwordHash` in `retrieveById` if handlers shouldn't see them.
+
+## Session guard: `createSessionGuard(options)`
+
+A cookie session for browser apps. The session is an encrypted JWT (jose, `dir` key management with `A256GCM`) that holds only the user id and an `exp`, stored in a cookie. Nothing is kept on the server.
+
+```ts
+import { createApp } from "@bunary/http";
+import { createAuth, createSessionGuard } from "@bunary/auth";
+import type { AuthLocals } from "@bunary/auth";
+
+const app = createApp<AuthLocals>();
+
+app.use(
+  createAuth<AuthLocals>({
+    defaultGuard: "session",
+    guards: {
+      session: createSessionGuard({
+        provider, // a UserProvider, see above
+        secret: process.env.SESSION_SECRET!, // exactly 32 bytes
+      }),
+    },
+  }),
+);
+
+app.post("/login", async (ctx) => {
+  const { email, password } = await ctx.json<{ email: string; password: string }>();
+  const result = await ctx.locals.auth.attempt({ email, password });
+  if (!result) return new Response("Invalid credentials", { status: 401 });
+  return { user: { id: result.user.id } };
+});
+
+app.get("/me", async (ctx) => {
+  const user = await ctx.locals.auth.authenticate();
+  return user ? { id: user.id } : new Response(null, { status: 401 });
+});
+
+app.post("/logout", async (ctx) => {
+  await ctx.locals.auth.logout();
+  return new Response(null, { status: 303, headers: { Location: "/" } });
+});
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `name` | `"session"` | Guard name |
+| `provider` | — (required) | `UserProvider` used by `authenticate` (`retrieveById`) and `attempt` |
+| `secret` | — (required) | Encryption key: exactly 32 bytes (`Uint8Array`, or a string that is 32 bytes in UTF-8) |
+| `cookieName` | `"bunary_session"` | Cookie name; must be an RFC 6265 token |
+| `lifetimeSeconds` | `7200` | Session lifetime; sets the session's `exp` and the cookie's `Max-Age` |
+| `secure` | `true` | Send the cookie only over HTTPS. Set `false` for local development over plain HTTP |
+| `path` | `"/"` | Cookie path; must start with `/` and contain no `;` or control characters |
+
+Generate a key with `crypto.getRandomValues(new Uint8Array(32))` and keep it out of source control. Construction throws when `provider` is missing, `secret` is missing or not exactly 32 bytes, `cookieName` is not an RFC 6265 token (so a name like `"a; Domain=evil.com"` can't inject attributes), `path` is invalid, or `lifetimeSeconds` is not a positive integer.
+
+The cookie is always `HttpOnly` and `SameSite=Lax`. `attempt()` and `login()` write it and `logout()` clears it (`Max-Age=0`, same path and attributes).
+
+`authenticate` decrypts the cookie and loads the user with `provider.retrieveById(id)`. Any of these authenticate nobody (`null`), without throwing:
+
+- no cookie, or a value that is not a JWE
+- a modified cookie (the AES-GCM tag no longer matches) or one encrypted with another key
+- a token using any algorithm other than `dir` + `A256GCM`, including signed or unsecured JWTs
+- an expired session (`now >= exp`), or one without `exp`
+- a user id that `retrieveById` doesn't find
+
+Errors thrown by the provider itself (e.g. a database outage) are not swallowed.
+
+Because the session lives in the cookie, `logout()` can only tell the browser to drop it: a copy of the cookie stays valid until its `exp`. Keep `lifetimeSeconds` short if that matters.
+
+## Logging in and out
+
+`attempt()`, `login()` and `logout()` behave per guard, like Laravel's guards:
+
+| Guard | `attempt(credentials)` | `login(user)` | `logout()` |
+| --- | --- | --- | --- |
+| Session | `{ user }` and writes the session cookie | writes the session cookie; resolves to `undefined` | clears the session cookie |
+| JWT | `{ user, token }`; needs `provider` | resolves to a new token | clears the request's user only; issued tokens stay valid until `exp` |
+| Basic | `{ user }` for this request only, from `{ username, password }` through `verify` | throws: the guard is stateless | throws: the guard is stateless |
+| Custom guard | its `attempt`, or throws `Guard "<name>" does not support attempt()` | its `login`, or throws | its `logout` if any, then clears the user |
+
+When the credentials don't match, `attempt()` resolves to `false`, sets no user and writes no cookie. On success, `attempt()` and `login()` also set `auth.user()` for the rest of the request.
+
+```ts
+// JWT: issue a token from a login endpoint
+app.post("/token", async (ctx) => {
+  const result = await ctx.locals.auth.attempt(await ctx.json(), "jwt");
+  if (!result) return new Response(null, { status: 401 });
+  return { token: result.token };
+});
+```
 
 ## JWT guard: `createJwtGuard(options)`
 
@@ -116,6 +257,9 @@ Reads `Authorization: Bearer <jwt>` (scheme is case-insensitive) and verifies th
 | `clockToleranceSeconds` | `0` | Leeway for `exp` and `nbf` |
 | `requireExp` | `true` | Reject tokens that have no `exp` claim |
 | `mapUser` | see below | Map the verified payload to an `AuthUser` |
+| `provider` | — | `UserProvider` for `attempt()` |
+| `signingKey` | — | Private key (`CryptoKey`, `KeyObject` or private JWK) for issuing tokens with an asymmetric algorithm |
+| `ttlSeconds` | `3600` | Lifetime of issued tokens (`exp`) |
 
 ### Key sources and algorithms
 
@@ -126,6 +270,7 @@ Pass **exactly one** of `secret`, `key` or `jwksUrl`. The guard throws at constr
 - `key` or `jwksUrl` is given without `algorithms`, or `algorithms` is empty
 - `algorithms` contains `none`
 - `secret` is combined with a non-HMAC algorithm, or `key`/`jwksUrl` with an HMAC algorithm
+- `secret` is combined with `signingKey`, or `ttlSeconds` is not a positive integer
 
 Only the configured algorithms are accepted. Tokens with `alg: none`, or signed with any other algorithm, are rejected. The algorithm/key-type split also stops algorithm-confusion attacks, such as an `HS256` token signed with your RSA public key.
 
@@ -170,6 +315,24 @@ createJwtGuard({
 });
 ```
 
+### Issuing tokens
+
+`attempt(credentials)` (with a `provider`) and `login(user)` issue a token signed with the **first** entry of `algorithms`: with `secret` for HMAC, or with `signingKey` for asymmetric algorithms. The token has `sub` = `String(user.id)`, `iat`, `exp` = `iat + ttlSeconds`, and `iss`/`aud` when `issuer`/`audience` are set, so the same guard accepts it. No other user fields are put in the token. With the default mapping, a token issued for `{ id: 7 }` authenticates as `{ id: "7" }`.
+
+Issuing a token without `secret` or `signingKey` throws, and so does `attempt()` without `provider`.
+
+```ts
+import { importPKCS8, importSPKI } from "jose";
+
+const jwt = createJwtGuard({
+  key: await importSPKI(process.env.JWT_PUBLIC_KEY!, "ES256"),
+  signingKey: await importPKCS8(process.env.JWT_PRIVATE_KEY!, "ES256"),
+  algorithms: ["ES256"],
+  provider,
+  ttlSeconds: 900,
+});
+```
+
 ## Basic guard: `createBasicGuard(options)`
 
 Reads `Authorization: Basic <base64>`, decodes the credentials as UTF-8 (invalid base64 or UTF-8 returns `null`), splits on the first `:` (so passwords may contain colons), and calls `verify(username, password, request)`.
@@ -190,6 +353,33 @@ const basicGuard = createBasicGuard({
 });
 ```
 
+The Basic guard is stateless: credentials come with every request. `attempt({ username, password })` runs `verify` and authenticates the current request only. `login()` and `logout()` throw, because there is no session or token to write or clear.
+
+## Cookies
+
+The session guard reads and writes cookies through a `CookieJar`:
+
+```ts
+interface CookieJar {
+  get(name: string): string | undefined;
+  set(name: string, value: string, options?: CookieOptions): void;
+  delete(name: string, options?: CookieOptions): void;
+}
+```
+
+`@bunary/http`'s `ctx.cookies` has this shape, and `createAuth()` passes it through when it exists. `createCookieJar(request)` creates a jar backed by Bun's `Bun.CookieMap` and `Bun.Cookie`. Its `headers()` method returns the queued `Set-Cookie` values. `set()` and `delete()` throw for names that are not RFC 6265 tokens. Use it with `createAuthManager()` outside `@bunary/http`:
+
+```ts
+import { createCookieJar } from "@bunary/auth";
+
+const cookies = createCookieJar(request);
+const auth = manager.createContext({ request, cookies });
+const ok = await auth.attempt({ email, password });
+
+const response = new Response(ok ? "welcome" : "nope", { status: ok ? 200 : 401 });
+for (const value of cookies.headers()) response.headers.append("Set-Cookie", value);
+```
+
 ## Custom guards
 
 Any object implementing `Guard` can be registered:
@@ -197,13 +387,19 @@ Any object implementing `Guard` can be registered:
 ```ts
 interface Guard {
   name: string;
-  authenticate(request: Request): Promise<AuthUser | null> | AuthUser | null;
+  authenticate(request: Request, input?: GuardInput): Promise<AuthUser | null> | AuthUser | null;
+  // Optional, for guards that log users in
+  attempt?(credentials: Credentials, input: GuardInput): Promise<AttemptResult | null>;
+  login?(user: AuthUser, input: GuardInput): Promise<string | undefined>;
+  logout?(input: GuardInput): Promise<void> | void;
 }
 ```
 
+`input` is `{ request, cookies }` from the auth context. `attempt` returns `null` for bad credentials, and the context turns that into `false`.
+
 ## Types
 
-Exported types: `AuthConfig`, `AuthContext`, `AuthLocals`, `AuthManagerInterface`, `AuthUser`, `Guard`, `GuardInput`, `JwtGuardOptions`, `BasicGuardOptions`.
+Exported types: `AttemptResult`, `AuthConfig`, `AuthContext`, `AuthLocals`, `AuthManagerInterface`, `AuthUser`, `CookieJar`, `CookieOptions`, `Credentials`, `Guard`, `GuardInput`, `QueuedCookieJar`, `UserProvider`, `JwtGuardOptions`, `SessionGuardOptions`, `BasicGuardOptions`.
 
 ## Removed in this release
 
@@ -211,7 +407,7 @@ These APIs were removed outright, with no deprecation shims:
 
 - Global helpers `auth`, `setAuthManager`, `getAuthManager`, `clearAuthManager`. Use `createAuth()` middleware, or `createAuthManager().createContext({ request })`.
 - `installAuthPlugin` and the `AuthPlugin`, `AuthPluginRouter` and `InstallableAuthManager` types. Register guards directly in `AuthConfig.guards`.
-- `createCookieStorage` and the `AuthStorage` type.
+- `createCookieStorage` and the `AuthStorage` type. For login state in cookies, use the [session guard](#session-guard-createsessionguardoptions).
 
 ## License
 
