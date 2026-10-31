@@ -21,7 +21,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun && tsc -p tsconfig.build.json",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --packages external && tsc -p tsconfig.build.json",
     "test": "bun test",
     "lint": "biome check ./src ./tests",
     "format": "biome check --write ./src ./tests",
@@ -52,9 +52,21 @@
   "engines": {
     "bun": ">=1.4.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "jose": "^6.2.14"
+  },
+  "peerDependencies": {
+    "@bunary/http": "^0.3.0",
+    "@bunary/core": "^0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@bunary/core": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
+    "@bunary/http": "^0.3.0",
     "@types/bun": "^1.4.2",
     "typescript": "^7.0.2"
   }

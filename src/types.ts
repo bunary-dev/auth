@@ -164,116 +164,19 @@ export interface AuthManagerInterface {
 }
 
 /**
- * Auth manager that supports plugin installation.
+ * Shape of `ctx.locals` added by the `createAuth()` middleware.
  *
- * This extends `AuthManagerInterface` with an internal guards map
- * that allows plugins to add/override guards. Managers created by
- * `createAuthManager()` implement this interface.
- */
-export interface InstallableAuthManager extends AuthManagerInterface {
-	/**
-	 * Internal guards map for plugin installation.
-	 *
-	 * @internal
-	 */
-	_guards: Map<string, Guard>;
-}
-
-/**
- * Minimal storage abstraction for auth workflows (sessions/OAuth).
- *
- * The storage implementation is responsible for how values are persisted
- * (cookies, headers, database, etc.). The interface stays intentionally small.
- */
-export interface AuthStorage {
-	/**
-	 * Read a value from the request (e.g. from cookies).
-	 */
-	get(request: Request, key: string): Promise<string | null> | string | null;
-
-	/**
-	 * Persist a value by mutating the response (e.g. adding `Set-Cookie`).
-	 */
-	set(
-		response: Response,
-		key: string,
-		value: string,
-		options?: { ttlSeconds?: number },
-	): Promise<void> | void;
-
-	/**
-	 * Clear a stored value by mutating the response.
-	 */
-	clear(response: Response, key: string): Promise<void> | void;
-}
-
-/**
- * Router interface for plugin route registration.
- *
- * This is a minimal interface that allows plugins to register routes
- * (e.g., OAuth redirect/callback endpoints). Full integration depends
- * on HTTP package middleware hooks (see auth issue #15).
- */
-export interface AuthPluginRouter {
-	/**
-	 * Register a route. Implementation depends on HTTP integration.
-	 */
-	get(
-		path: string,
-		handler: (request: Request) => Response | Promise<Response>,
-	): void;
-	post(
-		path: string,
-		handler: (request: Request) => Response | Promise<Response>,
-	): void;
-}
-
-/**
- * Authentication plugin contract for third-party providers.
- *
- * Plugins can provide guards, optional routes (OAuth callbacks), and
- * configuration validation/defaults.
+ * Pass it (or a type extending it) to `@bunary/http`'s `createApp<TLocals>()`
+ * and to `createAuth<TLocals>()` to get a typed `ctx.locals.auth`.
  *
  * @example
  * ```ts
- * const googleAuthPlugin: AuthPlugin = {
- *   name: "google",
- *   guards: {
- *     google: {
- *       name: "google",
- *       async authenticate(request) {
- *         // Validate Google OAuth token
- *         return user;
- *       }
- *     }
- *   },
- *   routes: (router) => {
- *     router.get("/auth/google", handleGoogleRedirect);
- *     router.get("/auth/google/callback", handleGoogleCallback);
- *   }
- * };
+ * type Locals = AuthLocals & { requestId: string };
+ * const app = createApp<Locals>();
+ * app.use(createAuth<Locals>(config));
  * ```
  */
-export interface AuthPlugin {
-	/** Unique name for this plugin */
-	name: string;
-
-	/**
-	 * Guards provided by this plugin.
-	 * Guards are merged into the auth manager (can override existing guards).
-	 */
-	guards?: Record<string, Guard>;
-
-	/**
-	 * Optional route registration callback.
-	 * Called during plugin installation to register OAuth redirect/callback routes.
-	 * Full integration depends on HTTP package middleware hooks (see auth issue #15).
-	 */
-	routes?: (router: AuthPluginRouter) => void;
-
-	/**
-	 * Optional configuration callback.
-	 * Called during installation to validate/apply plugin-specific options.
-	 */
-	configure?: (options: Record<string, unknown>) => void;
-}
+export type AuthLocals = {
+	/** Request-scoped auth context attached by `createAuth()` */
+	auth: AuthContext;
+};

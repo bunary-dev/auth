@@ -1,4 +1,19 @@
-import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	describe,
+	expect,
+	setSystemTime,
+	test,
+} from "bun:test";
+import {
+	exportJWK,
+	exportSPKI,
+	generateKeyPair,
+	type JWK,
+	SignJWT,
+} from "jose";
 import { createJwtGuard } from "../src/guards/jwt.js";
 
 describe("createJwtGuard", () => {
@@ -827,3 +842,216 @@ async function signHS256(
 	const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
 	return new Uint8Array(signature);
 }
+
+describe("createJwtGuard with jose: algorithms, keys and JWKS", () => {
+	const bearer = (token: string) =>
+		new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+	const inOneHour = () => Math.floor(Date.now() / 1000) + 3600;
+
+	const sign = (
+		alg: string,
+		key: Parameters<SignJWT["sign"]>[0],
+		claims: Record<string, unknown> = { sub: "123", exp: inOneHour() },
+		kid?: string,
+	) =>
+		new SignJWT(claims)
+			.setProtectedHeader(kid ? { alg, kid } : { alg })
+			.sign(key);
+
+	for (const alg of ["RS256", "ES256", "EdDSA"] as const) {
+		test(`accepts ${alg} tokens when configured with a public key`, async () => {
+			const { publicKey, privateKey } = await generateKeyPair(alg);
+			const guard = createJwtGuard({ key: publicKey, algorithms: [alg] });
+			const user = await guard.authenticate(
+				bearer(await sign(alg, privateKey)),
+			);
+			expect(user).toEqual({ id: "123" });
+		});
+	}
+
+	test("accepts a public key given as a JWK", async () => {
+		const { publicKey, privateKey } = await generateKeyPair("ES256", {
+			extractable: true,
+		});
+		const jwk = await exportJWK(publicKey);
+		const guard = createJwtGuard({ key: jwk, algorithms: ["ES256"] });
+		const user = await guard.authenticate(
+			bearer(await sign("ES256", privateKey)),
+		);
+		expect(user?.id).toBe("123");
+	});
+
+	test("rejects a token signed with a different key pair", async () => {
+		const { publicKey } = await generateKeyPair("RS256");
+		const other = await generateKeyPair("RS256");
+		const guard = createJwtGuard({ key: publicKey, algorithms: ["RS256"] });
+		expect(
+			await guard.authenticate(bearer(await sign("RS256", other.privateKey))),
+		).toBeNull();
+	});
+
+	test("rejects algorithms that are not configured", async () => {
+		const { publicKey, privateKey } = await generateKeyPair("RS256");
+		// Same key material, but the guard only allows PS256
+		const guard = createJwtGuard({ key: publicKey, algorithms: ["PS256"] });
+		expect(
+			await guard.authenticate(bearer(await sign("RS256", privateKey))),
+		).toBeNull();
+	});
+
+	test("rejects alg confusion: HS256 token signed with the RS public key", async () => {
+		const { publicKey } = await generateKeyPair("RS256", { extractable: true });
+		const pem = await exportSPKI(publicKey);
+		const forged = await sign("HS256", new TextEncoder().encode(pem));
+		const guard = createJwtGuard({ key: publicKey, algorithms: ["RS256"] });
+		expect(await guard.authenticate(bearer(forged))).toBeNull();
+	});
+
+	test("rejects an RS256 token against an HS256 secret guard", async () => {
+		const { privateKey } = await generateKeyPair("RS256");
+		const guard = createJwtGuard({ secret: "test-secret-key" });
+		expect(
+			await guard.authenticate(bearer(await sign("RS256", privateKey))),
+		).toBeNull();
+	});
+
+	test("returns null for a signed token whose payload is not valid base64url", async () => {
+		const secret = "test-secret-key";
+		const h = btoa(JSON.stringify({ alg: "HS256" }))
+			.replace(/=/g, "")
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_");
+		const guard = createJwtGuard({ secret });
+		expect(await guard.authenticate(bearer(`${h}.!!!@@@.sig`))).toBeNull();
+	});
+
+	describe("jwksUrl", () => {
+		let server: ReturnType<typeof Bun.serve>;
+		let jwksBody: { keys: JWK[] };
+		let privateKey: CryptoKey;
+
+		beforeAll(async () => {
+			const pair = await generateKeyPair("RS256", { extractable: true });
+			privateKey = pair.privateKey;
+			jwksBody = {
+				keys: [
+					{ ...(await exportJWK(pair.publicKey)), kid: "k1", alg: "RS256" },
+				],
+			};
+			server = Bun.serve({
+				port: 0,
+				fetch: () => Response.json(jwksBody),
+			});
+		});
+
+		afterAll(() => {
+			server.stop(true);
+		});
+
+		test("verifies tokens against keys fetched from the JWKS endpoint", async () => {
+			const guard = createJwtGuard({
+				jwksUrl: `http://localhost:${server.port}/.well-known/jwks.json`,
+				algorithms: ["RS256"],
+			});
+			const token = await sign(
+				"RS256",
+				privateKey,
+				{ sub: "jwks-user", exp: inOneHour() },
+				"k1",
+			);
+			expect((await guard.authenticate(bearer(token)))?.id).toBe("jwks-user");
+		});
+
+		test("accepts a URL object", async () => {
+			const guard = createJwtGuard({
+				jwksUrl: new URL(`http://localhost:${server.port}/jwks`),
+				algorithms: ["RS256"],
+			});
+			const token = await sign("RS256", privateKey, undefined, "k1");
+			expect(await guard.authenticate(bearer(token))).not.toBeNull();
+		});
+
+		test("rejects tokens signed by a key not in the JWKS", async () => {
+			const other = await generateKeyPair("RS256");
+			const guard = createJwtGuard({
+				jwksUrl: `http://localhost:${server.port}/jwks`,
+				algorithms: ["RS256"],
+			});
+			const token = await sign("RS256", other.privateKey, undefined, "k2");
+			expect(await guard.authenticate(bearer(token))).toBeNull();
+		});
+
+		test("returns null (does not throw) when the JWKS endpoint is unreachable", async () => {
+			const dead = Bun.serve({ port: 0, fetch: () => new Response("") });
+			const url = `http://localhost:${dead.port}/jwks`;
+			dead.stop(true);
+			const guard = createJwtGuard({ jwksUrl: url, algorithms: ["RS256"] });
+			const token = await sign("RS256", privateKey, undefined, "k1");
+			expect(await guard.authenticate(bearer(token))).toBeNull();
+		});
+	});
+
+	describe("construction validation", () => {
+		test("throws when no secret, key or jwksUrl is given", () => {
+			expect(() => createJwtGuard({})).toThrow(/secret|key|jwksUrl/);
+		});
+
+		test("throws when more than one key source is given", async () => {
+			const { publicKey } = await generateKeyPair("RS256");
+			expect(() =>
+				createJwtGuard({ secret: "s", key: publicKey, algorithms: ["RS256"] }),
+			).toThrow(/exactly one/);
+		});
+
+		test("throws when key is given without algorithms", async () => {
+			const { publicKey } = await generateKeyPair("RS256");
+			expect(() => createJwtGuard({ key: publicKey })).toThrow(/algorithms/);
+		});
+
+		test("throws when jwksUrl is given without algorithms", () => {
+			expect(() =>
+				createJwtGuard({ jwksUrl: "https://example.com/jwks" }),
+			).toThrow(/algorithms/);
+		});
+
+		test("throws for an empty algorithms list", () => {
+			expect(() => createJwtGuard({ secret: "s", algorithms: [] })).toThrow(
+				/algorithms/,
+			);
+		});
+
+		test("throws when a secret is combined with a non-HMAC algorithm", () => {
+			expect(() =>
+				createJwtGuard({ secret: "s", algorithms: ["RS256"] }),
+			).toThrow(/HS256/);
+		});
+
+		test("throws when a key or jwksUrl is combined with an HMAC algorithm", async () => {
+			const { publicKey } = await generateKeyPair("RS256");
+			expect(() =>
+				createJwtGuard({ key: publicKey, algorithms: ["HS256"] }),
+			).toThrow(/HMAC/);
+			expect(() =>
+				createJwtGuard({
+					jwksUrl: "https://example.com/jwks",
+					algorithms: ["HS256"],
+				}),
+			).toThrow(/HMAC/);
+		});
+
+		test("throws when algorithms contains none", () => {
+			expect(() =>
+				createJwtGuard({ secret: "s", algorithms: ["none"] }),
+			).toThrow(/none/);
+		});
+
+		test("accepts HS384/HS512 with a secret", async () => {
+			const secret = "a-secret-that-is-long-enough-for-hs512-testing!!";
+			const guard = createJwtGuard({ secret, algorithms: ["HS512"] });
+			const token = await sign("HS512", new TextEncoder().encode(secret));
+			expect((await guard.authenticate(bearer(token)))?.id).toBe("123");
+		});
+	});
+});

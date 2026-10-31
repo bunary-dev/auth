@@ -25,14 +25,14 @@
  */
 import type {
 	AuthConfig,
+	AuthManagerInterface,
 	AuthUser,
 	Guard,
 	GuardInput,
-	InstallableAuthManager,
 } from "./types.js";
 
-export function createAuthManager(config: AuthConfig): InstallableAuthManager {
-	// Store guards internally so they can be modified by plugins
+export function createAuthManager(config: AuthConfig): AuthManagerInterface {
+	// Copy guards so later mutation of the config object has no effect
 	const guards = new Map<string, Guard>();
 	for (const [name, guard] of Object.entries(config.guards)) {
 		guards.set(name, guard);
@@ -40,7 +40,7 @@ export function createAuthManager(config: AuthConfig): InstallableAuthManager {
 
 	const defaultGuardName = config.defaultGuard;
 
-	const manager = {
+	const manager: AuthManagerInterface = {
 		/**
 		 * Get a guard by name.
 		 *
@@ -96,14 +96,5 @@ export function createAuthManager(config: AuthConfig): InstallableAuthManager {
 		},
 	};
 
-	// Internal: expose guards map for plugin installation. Non-enumerable so it
-	// stays out of Object.keys(), spreads and serialisation of the manager.
-	Object.defineProperty(manager, "_guards", {
-		value: guards,
-		enumerable: false,
-		writable: false,
-		configurable: false,
-	});
-
-	return manager as InstallableAuthManager;
+	return manager;
 }

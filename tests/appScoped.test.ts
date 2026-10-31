@@ -1,12 +1,24 @@
 import { describe, expect, test } from "bun:test";
+import { createApp, type RequestContext } from "@bunary/http";
 import { createAuth } from "../src/appScoped.js";
-import type { AuthConfig, AuthContext, Guard } from "../src/types.js";
+import { createBasicGuard } from "../src/guards/basic.js";
+import type {
+	AuthConfig,
+	AuthContext,
+	AuthLocals,
+	Guard,
+} from "../src/types.js";
 
-interface TestRequestContext {
-	request: Request;
-	params: Record<string, string>;
-	query: URLSearchParams;
-	locals: Record<string, unknown>;
+function makeCtx(request: Request): RequestContext {
+	return {
+		request,
+		params: {},
+		query: new URL(request.url).searchParams,
+		locals: {},
+		json: <T>() => request.json() as Promise<T>,
+		text: () => request.text(),
+		formData: () => request.formData(),
+	};
 }
 
 describe("createAuth", () => {
@@ -38,12 +50,7 @@ describe("createAuth", () => {
 		};
 
 		const middleware = createAuth(config);
-		const ctx: TestRequestContext = {
-			request: new Request("http://localhost/test"),
-			params: {},
-			query: new URLSearchParams(),
-			locals: {},
-		};
+		const ctx = makeCtx(new Request("http://localhost/test"));
 
 		await middleware(ctx, async () => {
 			return new Response();
@@ -77,23 +84,17 @@ describe("createAuth", () => {
 			guards: { guard2 },
 		});
 
-		const ctx1: TestRequestContext = {
-			request: new Request("http://localhost/test", {
+		const ctx1 = makeCtx(
+			new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer token1" },
 			}),
-			params: {},
-			query: new URLSearchParams(),
-			locals: {},
-		};
+		);
 
-		const ctx2: TestRequestContext = {
-			request: new Request("http://localhost/test", {
+		const ctx2 = makeCtx(
+			new Request("http://localhost/test", {
 				headers: { Authorization: "Bearer token2" },
 			}),
-			params: {},
-			query: new URLSearchParams(),
-			locals: {},
-		};
+		);
 
 		await middleware1(ctx1, async () => {
 			await (ctx1.locals.auth as AuthContext).authenticate();
@@ -125,12 +126,7 @@ describe("createAuth", () => {
 		};
 
 		const middleware = createAuth(config);
-		const ctx: TestRequestContext = {
-			request: new Request("http://localhost/test"),
-			params: {},
-			query: new URLSearchParams(),
-			locals: {},
-		};
+		const ctx = makeCtx(new Request("http://localhost/test"));
 
 		await middleware(ctx, async () => {
 			return new Response();
@@ -157,23 +153,17 @@ describe("createAuth", () => {
 
 		const middleware = createAuth(config);
 
-		const ctx1: TestRequestContext = {
-			request: new Request("http://localhost/test", {
+		const ctx1 = makeCtx(
+			new Request("http://localhost/test", {
 				headers: { "x-user-id": "user1" },
 			}),
-			params: {},
-			query: new URLSearchParams(),
-			locals: {},
-		};
+		);
 
-		const ctx2: TestRequestContext = {
-			request: new Request("http://localhost/test", {
+		const ctx2 = makeCtx(
+			new Request("http://localhost/test", {
 				headers: { "x-user-id": "user2" },
 			}),
-			params: {},
-			query: new URLSearchParams(),
-			locals: {},
-		};
+		);
 
 		await Promise.all([
 			middleware(ctx1, async () => {
@@ -192,5 +182,56 @@ describe("createAuth", () => {
 		expect(user1).toEqual({ id: "user1" });
 		expect(user2).toEqual({ id: "user2" });
 		expect(ctx1.locals.auth).not.toBe(ctx2.locals.auth);
+	});
+
+	test("works as @bunary/http middleware end to end", async () => {
+		const passwordHash = await Bun.password.hash("s3cret");
+		const app = createApp<AuthLocals>();
+		app.use(
+			createAuth<AuthLocals>({
+				defaultGuard: "basic",
+				guards: {
+					basic: createBasicGuard({
+						async verify(username, password) {
+							if (username !== "admin") return null;
+							if (!(await Bun.password.verify(password, passwordHash)))
+								return null;
+							return { id: 1, username };
+						},
+					}),
+				},
+			}),
+		);
+		app.get("/me", async (ctx) => {
+			const user = await ctx.locals.auth.authenticate();
+			if (!user) return new Response("Unauthorized", { status: 401 });
+			return { user };
+		});
+
+		const ok = await app.fetch(
+			new Request("http://localhost/me", {
+				headers: { Authorization: `Basic ${btoa("admin:s3cret")}` },
+			}),
+		);
+		expect(ok.status).toBe(200);
+		expect(await ok.json()).toEqual({ user: { id: 1, username: "admin" } });
+
+		const denied = await app.fetch(
+			new Request("http://localhost/me", {
+				headers: { Authorization: `Basic ${btoa("admin:wrong")}` },
+			}),
+		);
+		expect(denied.status).toBe(401);
+	});
+
+	test("default-typed middleware is accepted by an untyped app", () => {
+		const app = createApp();
+		app.use(
+			createAuth({
+				defaultGuard: "t",
+				guards: { t: { name: "t", authenticate: () => null } },
+			}),
+		);
+		expect(typeof app.fetch).toBe("function");
 	});
 });

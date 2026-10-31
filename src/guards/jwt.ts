@@ -1,7 +1,19 @@
+import {
+	type CryptoKey,
+	createRemoteJWKSet,
+	type JWK,
+	type JWTVerifyGetKey,
+	type JWTVerifyOptions,
+	jwtVerify,
+	type KeyObject,
+} from "jose";
 import type { AuthUser, Guard } from "../types.js";
 
 /**
  * Options for creating a JWT guard.
+ *
+ * Exactly one key source is required: `secret` (HMAC), `key` (a public key)
+ * or `jwksUrl` (a remote JSON Web Key Set).
  */
 export interface JwtGuardOptions {
 	/**
@@ -10,10 +22,32 @@ export interface JwtGuardOptions {
 	name?: string;
 
 	/**
-	 * Secret key for verifying JWT signatures (HS256).
-	 * Can be a string or Uint8Array.
+	 * Shared secret for HMAC algorithms (`HS256`, `HS384`, `HS512`).
+	 * Can be a string (UTF-8 encoded) or Uint8Array. Must not be empty.
 	 */
-	secret: string | Uint8Array;
+	secret?: string | Uint8Array;
+
+	/**
+	 * Public key for asymmetric algorithms (e.g. `RS256`, `PS256`, `ES256`,
+	 * `EdDSA`), as a `CryptoKey`, Node `KeyObject` or public JWK.
+	 * Requires `algorithms`.
+	 */
+	key?: CryptoKey | KeyObject | JWK;
+
+	/**
+	 * URL of a JSON Web Key Set (e.g. `https://issuer/.well-known/jwks.json`).
+	 * Keys are fetched and cached by jose's `createRemoteJWKSet`.
+	 * Requires `algorithms`.
+	 */
+	jwksUrl?: string | URL;
+
+	/**
+	 * Accepted `alg` header values. Tokens signed with any other algorithm are
+	 * rejected. Defaults to `["HS256"]` with a `secret`; required with `key`
+	 * or `jwksUrl`. HMAC algorithms are only allowed with `secret`, and
+	 * asymmetric algorithms only with `key`/`jwksUrl`.
+	 */
+	algorithms?: string[];
 
 	/**
 	 * Expected issuer (iss claim).
@@ -47,77 +81,113 @@ export interface JwtGuardOptions {
 	 * customClaims are the payload claims other than the registered ones
 	 * (`iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`).
 	 *
-	 * @param payload - The decoded JWT payload
+	 * @param payload - The verified JWT payload
 	 * @returns The authenticated user or null if mapping fails
 	 */
 	mapUser?: (payload: Record<string, unknown>) => AuthUser | null;
 }
 
 /**
- * Create a JWT Bearer guard that verifies HS256-signed tokens.
+ * Create a JWT Bearer guard.
  *
  * The guard extracts tokens from `Authorization: Bearer <jwt>` headers,
- * verifies the signature using WebCrypto, validates standard claims
- * (exp, nbf, iss, aud), and maps the payload to an AuthUser.
+ * verifies them with jose's `jwtVerify` (signature, allowed algorithms,
+ * exp, nbf, iss, aud), and maps the payload to an AuthUser. Any invalid,
+ * malformed or unverifiable token yields `null`; the guard never throws
+ * while authenticating.
  *
  * @param options - Guard configuration
  * @returns A guard that implements JWT Bearer authentication
- * @throws {Error} If the secret is empty
+ * @throws {Error} If the key configuration is invalid (no or several key
+ *   sources, empty secret, missing/empty/mismatched `algorithms`)
  *
  * @example
  * ```ts
- * import { createJwtGuard, createAuthManager } from "@bunary/auth";
+ * import { createJwtGuard } from "@bunary/auth";
  *
+ * // HS256 with a shared secret
  * const jwtGuard = createJwtGuard({
  *   secret: process.env.JWT_SECRET!,
  *   issuer: "my-app",
  *   audience: "api",
- *   mapUser: (payload) => ({
- *     id: payload.sub as string,
- *     email: payload.email as string,
- *   })
  * });
  *
- * const manager = createAuthManager({
- *   defaultGuard: "jwt",
- *   guards: { jwt: jwtGuard }
+ * // RS256 against an identity provider's JWKS
+ * const oidcGuard = createJwtGuard({
+ *   jwksUrl: "https://login.example.com/.well-known/jwks.json",
+ *   algorithms: ["RS256"],
+ *   issuer: "https://login.example.com/",
+ *   audience: "api",
  * });
  * ```
  */
 export function createJwtGuard(options: JwtGuardOptions): Guard {
-	if (options.secret.length === 0) {
+	const { secret, key, jwksUrl } = options;
+	const sources = [secret, key, jwksUrl].filter((s) => s !== undefined);
+	if (sources.length === 0) {
+		throw new Error(
+			"createJwtGuard: one of `secret`, `key` or `jwksUrl` is required",
+		);
+	}
+	if (sources.length > 1) {
+		throw new Error(
+			"createJwtGuard: pass exactly one of `secret`, `key` or `jwksUrl`",
+		);
+	}
+	if (secret !== undefined && secret.length === 0) {
 		throw new Error("createJwtGuard: `secret` must not be empty");
 	}
 
-	const guardName = options.name ?? "jwt";
-	const requireExp = options.requireExp ?? true;
-	const clockTolerance = options.clockToleranceSeconds ?? 0;
-	const now = () => Math.floor(Date.now() / 1000);
-
-	// Import HMAC key once per guard instance (reused across requests)
-	const encoder = new TextEncoder();
-	// Ensure keyData is a Uint8Array backed by ArrayBuffer (not ArrayBufferLike)
-	let keyData: Uint8Array<ArrayBuffer>;
-	if (typeof options.secret === "string") {
-		keyData = encoder.encode(options.secret);
-	} else {
-		// Create a new ArrayBuffer-backed Uint8Array by copying the data
-		// This ensures TypeScript sees it as Uint8Array<ArrayBuffer>, not Uint8Array<ArrayBufferLike>
-		// Create a new ArrayBuffer and copy the data to ensure ArrayBuffer backing
-		const buffer = new ArrayBuffer(options.secret.length);
-		keyData = new Uint8Array(buffer);
-		keyData.set(options.secret);
+	const algorithms = options.algorithms ?? (secret ? ["HS256"] : undefined);
+	if (!algorithms) {
+		throw new Error(
+			"createJwtGuard: `algorithms` is required with `key` or `jwksUrl`",
+		);
 	}
-	const cryptoKeyPromise = crypto.subtle.importKey(
-		"raw",
-		keyData,
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["verify"],
-	);
-	// Failures surface per-request in verifyHS256 (which returns false); this
-	// prevents an unhandled rejection when no request has awaited it yet.
-	cryptoKeyPromise.catch(() => {});
+	if (algorithms.length === 0) {
+		throw new Error("createJwtGuard: `algorithms` must not be empty");
+	}
+	for (const alg of algorithms) {
+		if (alg.toLowerCase() === "none") {
+			throw new Error('createJwtGuard: algorithm "none" is not allowed');
+		}
+		const isHmac = HMAC_ALGORITHMS.has(alg);
+		if (secret !== undefined && !isHmac) {
+			throw new Error(
+				`createJwtGuard: \`secret\` only supports HS256, HS384 or HS512, got "${alg}"`,
+			);
+		}
+		if (secret === undefined && isHmac) {
+			throw new Error(
+				`createJwtGuard: HMAC algorithm "${alg}" requires \`secret\`, not \`key\` or \`jwksUrl\``,
+			);
+		}
+	}
+
+	let verificationKey:
+		| CryptoKey
+		| KeyObject
+		| JWK
+		| Uint8Array
+		| JWTVerifyGetKey;
+	if (secret !== undefined) {
+		verificationKey =
+			typeof secret === "string" ? new TextEncoder().encode(secret) : secret;
+	} else if (key !== undefined) {
+		verificationKey = key;
+	} else {
+		verificationKey = createRemoteJWKSet(new URL(jwksUrl as string | URL));
+	}
+
+	const verifyOptions: JWTVerifyOptions = {
+		algorithms,
+		clockTolerance: options.clockToleranceSeconds ?? 0,
+		requiredClaims: (options.requireExp ?? true) ? ["exp"] : [],
+	};
+	if (options.issuer !== undefined) verifyOptions.issuer = options.issuer;
+	if (options.audience !== undefined) verifyOptions.audience = options.audience;
+
+	const guardName = options.name ?? "jwt";
 
 	return {
 		name: guardName,
@@ -133,103 +203,25 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 				return null;
 			}
 
-			// Extract token
 			const token = authHeader.slice(bearerMatch[0].length).trim();
 			if (!token) {
 				return null;
 			}
 
-			// Parse JWT (header.payload.signature)
-			const parts = token.split(".");
-			if (parts.length !== 3) {
-				return null;
-			}
-
-			const [encodedHeader, encodedPayload, encodedSignature] = parts;
-			if (!encodedHeader || !encodedPayload || !encodedSignature) {
-				return null;
-			}
-
-			// Decode header and payload
-			let header: unknown;
-			let payload: unknown;
-
+			let payload: Record<string, unknown>;
 			try {
-				header = JSON.parse(base64UrlDecode(encodedHeader));
-				payload = JSON.parse(base64UrlDecode(encodedPayload));
-			} catch {
-				// Invalid base64 or JSON - return null (don't throw)
-				return null;
-			}
-
-			// Header and payload must be plain (non-null, non-array) objects
-			if (!isPlainObject(header) || !isPlainObject(payload)) {
-				return null;
-			}
-
-			// Verify algorithm (must be HS256)
-			if (header.alg !== "HS256") {
-				return null;
-			}
-
-			// Verify signature
-			const signatureValid = await verifyHS256(
-				`${encodedHeader}.${encodedPayload}`,
-				encodedSignature,
-				cryptoKeyPromise,
-			);
-			if (!signatureValid) {
-				return null;
-			}
-
-			// Validate exp (expiration)
-			if (requireExp && payload.exp === undefined) {
-				return null;
-			}
-			if (payload.exp !== undefined) {
-				const exp = typeof payload.exp === "number" ? payload.exp : null;
-				if (exp === null || now() >= exp + clockTolerance) {
-					return null;
-				}
-			}
-
-			// Validate nbf (not before)
-			if (payload.nbf !== undefined) {
-				const nbf = typeof payload.nbf === "number" ? payload.nbf : null;
-				if (nbf === null || now() < nbf - clockTolerance) {
-					return null;
-				}
-			}
-
-			// Validate iss (issuer)
-			if (options.issuer !== undefined) {
-				if (payload.iss !== options.issuer) {
-					return null;
-				}
-			}
-
-			// Validate aud (audience)
-			if (options.audience !== undefined) {
-				const tokenAud = payload.aud;
-				if (tokenAud === undefined) {
-					return null;
-				}
-
-				const expectedAuds = Array.isArray(options.audience)
-					? options.audience
-					: [options.audience];
-				const tokenAuds = Array.isArray(tokenAud) ? tokenAud : [tokenAud];
-
-				// Check if any expected audience matches any token audience
-				const matches = expectedAuds.some((expected) =>
-					tokenAuds.some((tokenAud) => tokenAud === expected),
+				// Overloads differ for keys vs. key resolvers; both are handled at runtime
+				const result = await jwtVerify(
+					token,
+					verificationKey as JWTVerifyGetKey,
+					verifyOptions,
 				);
-				if (!matches) {
-					return null;
-				}
+				payload = result.payload;
+			} catch {
+				// Malformed, unverifiable or invalid token (or JWKS fetch failure)
+				return null;
 			}
 
-			// Map payload to user
 			if (options.mapUser) {
 				try {
 					return options.mapUser(payload);
@@ -241,29 +233,22 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 
 			// Default mapping: use sub as id, plus non-registered claims
 			// Set id last to ensure sub always wins over a payload `id` claim
-			if (payload.sub !== undefined) {
-				const sub = payload.sub;
-				// Validate sub is a string or number
-				if (typeof sub !== "string" && typeof sub !== "number") {
-					return null;
-				}
-				const claims: Record<string, unknown> = {};
-				for (const [key, value] of Object.entries(payload)) {
-					if (!REGISTERED_CLAIMS.has(key)) {
-						claims[key] = value;
-					}
-				}
-				return {
-					...claims,
-					id: sub,
-				} as AuthUser;
+			const sub = payload.sub;
+			if (typeof sub !== "string" && typeof sub !== "number") {
+				return null;
 			}
-
-			// No sub claim and no custom mapper - return null
-			return null;
+			const claims: Record<string, unknown> = {};
+			for (const [name, value] of Object.entries(payload)) {
+				if (!REGISTERED_CLAIMS.has(name)) {
+					claims[name] = value;
+				}
+			}
+			return { ...claims, id: sub } as AuthUser;
 		},
 	};
 }
+
+const HMAC_ALGORITHMS = new Set(["HS256", "HS384", "HS512"]);
 
 /**
  * RFC 7519 registered claim names, excluded from the default user mapping.
@@ -277,75 +262,3 @@ const REGISTERED_CLAIMS = new Set([
 	"iat",
 	"jti",
 ]);
-
-/**
- * Check that a parsed JSON value is a non-null, non-array object.
- */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Decode base64url-encoded string (UTF-8).
- */
-function base64UrlDecode(str: string): string {
-	// Decode to Uint8Array first, then decode UTF-8
-	const bytes = base64UrlDecodeToUint8Array(str);
-	const decoder = new TextDecoder("utf-8");
-	return decoder.decode(bytes);
-}
-
-/**
- * Verify HS256 signature using WebCrypto.
- *
- * @param message - The message to verify (header.payload)
- * @param encodedSignature - Base64url-encoded signature
- * @param cryptoKeyPromise - Promise resolving to the imported CryptoKey
- * @returns True if signature is valid, false otherwise
- */
-async function verifyHS256(
-	message: string,
-	encodedSignature: string,
-	cryptoKeyPromise: Promise<CryptoKey>,
-): Promise<boolean> {
-	try {
-		const encoder = new TextEncoder();
-		const messageData = encoder.encode(message);
-
-		// Decode signature
-		const decodedSignature = base64UrlDecodeToUint8Array(encodedSignature);
-		// Ensure signature is backed by ArrayBuffer (not ArrayBufferLike)
-		// Create a new ArrayBuffer and copy the data to ensure ArrayBuffer backing
-		const signatureBuffer = new ArrayBuffer(decodedSignature.length);
-		const signature: Uint8Array<ArrayBuffer> = new Uint8Array(signatureBuffer);
-		signature.set(decodedSignature);
-
-		// Get the imported key (reused across requests)
-		const cryptoKey = await cryptoKeyPromise;
-
-		// Verify signature
-		return await crypto.subtle.verify(
-			"HMAC",
-			cryptoKey,
-			signature,
-			messageData,
-		);
-	} catch {
-		// Invalid signature or key - return false (don't throw)
-		return false;
-	}
-}
-
-/**
- * Decode base64url-encoded string to Uint8Array.
- */
-function base64UrlDecodeToUint8Array(str: string): Uint8Array {
-	const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-	const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-	const binary = atob(padded);
-	const bytes = new Uint8Array(binary.length);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i);
-	}
-	return bytes;
-}
