@@ -1,6 +1,6 @@
 {
   "name": "@bunary/auth",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Authentication guards and helpers for Bunary - a Bun-first backend framework inspired by Laravel",
   "type": "module",
   "main": "./dist/index.js",
@@ -31,6 +31,7 @@
     "lint": "biome check ./src ./tests",
     "format": "biome check --write ./src ./tests",
     "typecheck": "tsc --noEmit",
+    "prepack": "bun run build",
     "pack:check": "bun pm pack --dry-run"
   },
   "keywords": [
@@ -61,7 +62,7 @@
     "jose": "^6.2.14"
   },
   "peerDependencies": {
-    "@bunary/core": "^1.0.0-rc.1"
+    "@bunary/core": "^0.4.0"
   },
   "peerDependenciesMeta": {
     "@bunary/core": {
@@ -70,8 +71,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
-    "@bunary/core": "file:./vendor/bunary-core-1.0.0-rc.2.tgz",
-    "@bunary/http": "^0.3.0",
+    "@bunary/core": "^0.4.0",
+    "@bunary/http": "^0.4.0",
     "@types/bun": "^1.4.2",
     "typescript": "^7.0.2"
   }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createApp } from "@bunary/http";
+import { createRouter } from "@bunary/http";
 import { createAuth } from "../src/appScoped.js";
 import { createCookieJar } from "../src/cookies.js";
 import { createSessionGuard } from "../src/guards/session.js";
@@ -49,16 +49,27 @@ describe("createCookieJar()", () => {
 });
 
 describe("createAuth() with the session guard", () => {
-	async function makeApp(jarFactory?: (req: Request) => CookieJar) {
+	/**
+	 * `cookies`: "http" keeps @bunary/http's own `ctx.cookies`; "none" hides
+	 * it from auth (a host without a jar); a function swaps in that jar. Both
+	 * put http's (untouched) jar back afterwards, since http reads it.
+	 */
+	async function makeApp(
+		cookies: "http" | "none" | ((req: Request) => CookieJar) = "http",
+	) {
 		const provider = await createMemoryProvider();
-		const app = createApp<AuthLocals>();
-		if (jarFactory) {
-			// Simulates @bunary/http >= 1.0, which provides ctx.cookies
+		const app = createRouter<AuthLocals>();
+		if (cookies !== "http") {
 			app.use(async (ctx, next) => {
-				(ctx as unknown as { cookies: CookieJar }).cookies = jarFactory(
-					ctx.request,
-				);
-				return await next();
+				const target = ctx as unknown as { cookies?: CookieJar };
+				const httpJar = target.cookies;
+				if (cookies === "none") delete target.cookies;
+				else target.cookies = cookies(ctx.request);
+				try {
+					return await next();
+				} finally {
+					target.cookies = httpJar;
+				}
 			});
 		}
 		app.use(
@@ -70,7 +81,7 @@ describe("createAuth() with the session guard", () => {
 			}),
 		);
 		app.post("/login", async (ctx) => {
-			const body = await ctx.json<Record<string, unknown>>();
+			const body = await ctx.body.json<Record<string, unknown>>();
 			const result = await ctx.locals.auth.attempt(body);
 			if (!result) return new Response("nope", { status: 401 });
 			return { id: result.user.id };
@@ -86,8 +97,45 @@ describe("createAuth() with the session guard", () => {
 		return app;
 	}
 
-	test("without ctx.cookies, queued cookies are appended to the response", async () => {
+	test("with @bunary/http's ctx.cookies, the session cookie is set and cleared once", async () => {
 		const app = await makeApp();
+		const login = await app.fetch(
+			new Request("http://localhost/login", {
+				method: "POST",
+				body: JSON.stringify({
+					email: "ada@example.com",
+					password: "correct horse",
+				}),
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		expect(login.status).toBe(200);
+		expect(await login.json()).toEqual({ id: 1 });
+		const setCookies = login.headers.getSetCookie();
+		expect(setCookies).toHaveLength(1);
+		expect(setCookies[0]).toContain("HttpOnly");
+
+		const me = await app.fetch(
+			new Request("http://localhost/me", {
+				headers: { cookie: cookieHeaderFrom(setCookies) },
+			}),
+		);
+		expect(await me.json()).toEqual({ id: 1 });
+
+		const logout = await app.fetch(
+			new Request("http://localhost/logout", {
+				method: "POST",
+				headers: { cookie: cookieHeaderFrom(setCookies) },
+			}),
+		);
+		expect(logout.status).toBe(302);
+		expect(logout.headers.get("location")).toBe("http://localhost/");
+		expect(logout.headers.getSetCookie()).toHaveLength(1);
+		expect(logout.headers.getSetCookie()[0]).toContain("Max-Age=0");
+	});
+
+	test("without ctx.cookies, queued cookies are appended to the response", async () => {
+		const app = await makeApp("none");
 		const login = await app.fetch(
 			new Request("http://localhost/login", {
 				method: "POST",
@@ -161,7 +209,7 @@ describe("createAuth() with the session guard", () => {
 
 	test("non-Response results are converted when cookies are queued", async () => {
 		const provider = await createMemoryProvider();
-		const app = createApp<AuthLocals>();
+		const app = createRouter<AuthLocals>();
 		app.use(
 			createAuth<AuthLocals>({
 				defaultGuard: "session",

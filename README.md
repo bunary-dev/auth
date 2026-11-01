@@ -2,13 +2,13 @@
 
 Authentication for the Bunary framework. Guard-based: `createAuth` is middleware (it fits `@bunary/http`'s `router.use()`) that attaches a request-scoped auth context to `ctx.locals.auth`, `createAuthManager` covers standalone use, and the built-in guards are an encrypted cookie session guard and a JWT guard, both built on [jose](https://github.com/panva/jose) (JWT: HS256 by default; RS256/ES256/EdDSA via a public key or JWKS URL), and a Basic guard. Users are looked up through a `UserProvider`, and each guard supports Laravel-style `attempt()`, `login()` and `logout()`. See the full reference: [docs/index.md](./docs/index.md).
 
-Requires Bun ≥ 1.4.0. No other bunary package is required: auth types its middleware against its own small structural interfaces (`AuthRequestContext`, `AuthCookieJar`, `AuthMiddleware`), which `@bunary/http`'s objects already satisfy. `@bunary/core` (≥ 1.0.0-rc.1) is an optional peer: `@bunary/auth/provider` adds an `auth` config key, `authProvider`, `AuthToken` and `authMiddleware()`/`requireAuth()` (401 problem response) for core apps.
+Requires Bun ≥ 1.4.0. No other bunary package is required: auth types its middleware against its own small structural interfaces (`AuthRequestContext`, `AuthCookieJar`, `AuthMiddleware`), which `@bunary/http`'s objects already satisfy. `@bunary/core` (^0.4.0) is an optional peer: `@bunary/auth/provider` adds an `auth` config key, `authProvider`, `AuthToken` and `authMiddleware()`/`requireAuth()` (401 problem response) for core apps.
 
 ## Installation
 
 ```bash
-bun add @bunary/auth
-bun add @bunary/http   # for the Quick Start below
+bun add @bunary/auth@^0.4.0
+bun add @bunary/http@^0.4.0   # for the Quick Start below
 ```
 
 ## Quick Start

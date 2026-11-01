@@ -84,7 +84,7 @@ export function authContextMiddleware<Ctx extends AuthRequestContext<object>>(
 	return async (ctx, next) => {
 		const manager = resolveManager(ctx);
 
-		// A framework jar (e.g. @bunary/http >= 1.0's) appends its own Set-Cookie headers
+		// A framework jar (e.g. @bunary/http's ctx.cookies) appends its own Set-Cookie headers
 		const ctxCookies = ctx.cookies;
 		const fallback = ctxCookies ? undefined : createCookieJar(ctx.request);
 

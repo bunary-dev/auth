@@ -1,23 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { createApp, type RequestContext } from "@bunary/http";
+import { createRouter } from "@bunary/http";
 import { createAuth } from "../src/appScoped.js";
 import { createBasicGuard } from "../src/guards/basic.js";
 import type {
 	AuthConfig,
 	AuthContext,
 	AuthLocals,
+	AuthRequestContext,
 	Guard,
 } from "../src/types.js";
 
-function makeCtx(request: Request): RequestContext {
+function makeCtx(request: Request): AuthRequestContext {
 	return {
 		request,
-		params: {},
-		query: new URL(request.url).searchParams,
 		locals: {},
-		json: <T>() => request.json() as Promise<T>,
-		text: () => request.text(),
-		formData: () => request.formData(),
 	};
 }
 
@@ -186,7 +182,7 @@ describe("createAuth", () => {
 
 	test("works as @bunary/http middleware end to end", async () => {
 		const passwordHash = await Bun.password.hash("s3cret");
-		const app = createApp<AuthLocals>();
+		const app = createRouter<AuthLocals>();
 		app.use(
 			createAuth<AuthLocals>({
 				defaultGuard: "basic",
@@ -224,8 +220,8 @@ describe("createAuth", () => {
 		expect(denied.status).toBe(401);
 	});
 
-	test("default-typed middleware is accepted by an untyped app", () => {
-		const app = createApp();
+	test("default-typed middleware is accepted by an untyped router", () => {
+		const app = createRouter();
 		app.use(
 			createAuth({
 				defaultGuard: "t",
