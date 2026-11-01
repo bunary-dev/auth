@@ -17,37 +17,45 @@ import type {
  * same process to have different auth configurations without global state.
  *
  * The middleware is typed against auth's own {@link AuthRequestContext}, so it
- * works with `@bunary/http`'s `app.use()` and with any other object of that
+ * works with `@bunary/http`'s `router.use()` and with any other object of that
  * shape. Guards that write cookies (the session guard) use `ctx.cookies`
  * when the context provides it. Otherwise the middleware keeps its own
  * per-request jar and appends the queued `Set-Cookie` headers to the
  * response returned by `next()`.
  *
- * @typeParam TLocals - Shape of `ctx.locals`, matching `createApp<TLocals>()`.
+ * @typeParam TLocals - Shape of `ctx.locals`, matching `createRouter<TLocals>()`.
  *   Use `AuthLocals` (or a type extending it) to get a typed `ctx.locals.auth`.
  * @param config - Authentication configuration (guards and default guard)
  * @returns Middleware that attaches auth context to each request
  *
  * @example
  * ```ts
- * import { createApp } from "@bunary/http";
+ * import { createApp } from "@bunary/core";
+ * import { createRouter } from "@bunary/http";
+ * import { httpProvider, serve } from "@bunary/http/provider";
  * import { createAuth, createJwtGuard } from "@bunary/auth";
  * import type { AuthLocals } from "@bunary/auth";
  *
- * const app = createApp<AuthLocals>();
+ * const router = createRouter<AuthLocals>();
  *
- * app.use(createAuth<AuthLocals>({
+ * router.use(createAuth<AuthLocals>({
  *   defaultGuard: "jwt",
  *   guards: {
  *     jwt: createJwtGuard({ secret: process.env.JWT_SECRET! })
  *   }
  * }));
  *
- * app.get("/profile", async (ctx) => {
+ * router.get("/profile", async (ctx) => {
  *   const user = await ctx.locals.auth.authenticate();
  *   if (!user) return new Response("Unauthorized", { status: 401 });
  *   return { user };
  * });
+ *
+ * const app = await createApp({
+ *   config: { app: { name: "my-api" }, http: { port: 3000 } },
+ *   providers: [httpProvider(router)],
+ * }).boot();
+ * serve(app);
  * ```
  */
 export function createAuth<TLocals extends object = Record<string, unknown>>(

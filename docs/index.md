@@ -17,13 +17,13 @@ The Quick Start uses `@bunary/http`; install it alongside: `bun add @bunary/auth
 ## Quick Start
 
 ```ts
-import { createApp } from "@bunary/http";
+import { createRouter } from "@bunary/http";
 import { createAuth, createJwtGuard } from "@bunary/auth";
 import type { AuthLocals } from "@bunary/auth";
 
-const app = createApp<AuthLocals>();
+const router = createRouter<AuthLocals>();
 
-app.use(
+router.use(
   createAuth<AuthLocals>({
     defaultGuard: "jwt",
     guards: {
@@ -36,7 +36,7 @@ app.use(
   }),
 );
 
-app.get("/profile", async (ctx) => {
+router.get("/profile", async (ctx) => {
   const user = await ctx.locals.auth.authenticate(); // default guard
   if (!user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -47,7 +47,7 @@ app.get("/profile", async (ctx) => {
   return { user };
 });
 
-app.listen({ port: 3000 });
+router.listen({ port: 3000 });
 ```
 
 There is no global auth singleton: each app creates its own middleware, so several apps with different auth configs can run in the same process.
@@ -62,15 +62,15 @@ There is no global auth singleton: each app creates its own middleware, so sever
 - `guards` — record of named `Guard`s
 - `provider` — optional `UserProvider`, returned by `manager.provider()`. Guards still take their provider in their own options.
 
-`AuthLocals` is `{ auth: AuthContext }`. Pass it (or a type extending it) to both `createApp<TLocals>()` and `createAuth<TLocals>()` to get a typed `ctx.locals.auth`:
+`AuthLocals` is `{ auth: AuthContext }`. Pass it (or a type extending it) to both `createRouter<TLocals>()` and `createAuth<TLocals>()` to get a typed `ctx.locals.auth`:
 
 ```ts
 type Locals = AuthLocals & { requestId: string };
-const app = createApp<Locals>();
-app.use(createAuth<Locals>(config));
+const router = createRouter<Locals>();
+router.use(createAuth<Locals>(config));
 ```
 
-With an untyped `createApp()`, `createAuth(config)` works too; read `ctx.locals.auth as AuthContext`.
+With an untyped `createRouter()`, `createAuth(config)` works too; read `ctx.locals.auth as AuthContext`.
 
 Guards that write cookies (the [session guard](#session-guard-createsessionguardoptions)) use `ctx.cookies` when the context provides one (as `@bunary/http` ≥ 1.0 is planned to). Without `ctx.cookies` (e.g. `@bunary/http` 0.3), the middleware keeps its own per-request [cookie jar](#cookies) and appends its `Set-Cookie` headers to the response that `next()` returns. That includes immutable responses such as `Response.redirect()`, which are copied, and plain-object, string or `null` results, which are converted the way `@bunary/http` converts them.
 
@@ -115,26 +115,26 @@ const response = await middleware(ctx, async () => {
 
 ## Using with @bunary/http
 
-`@bunary/http`'s `RequestContext` and `Middleware` are structurally compatible with auth's types, so `app.use()` (or `router.use()`) takes auth's middleware directly, with no casts:
+`@bunary/http`'s `RequestContext` and `Middleware` are structurally compatible with auth's types, so `router.use()` takes auth's middleware directly, with no casts:
 
 ```ts
-import { createApp } from "@bunary/http";
+import { createRouter } from "@bunary/http";
 import { createAuth, createSessionGuard, type AuthLocals } from "@bunary/auth";
 
-const app = createApp<AuthLocals>();
-app.use(
+const router = createRouter<AuthLocals>();
+router.use(
   createAuth<AuthLocals>({
     defaultGuard: "session",
     guards: { session: createSessionGuard({ provider: users, secret: process.env.SESSION_KEY! }) },
   }),
 );
-app.post("/login", async (ctx) => {
+router.post("/login", async (ctx) => {
   const ok = await ctx.locals.auth.attempt(await ctx.json());
   return ok ? { id: ok.user.id } : new Response(null, { status: 401 });
 });
 ```
 
-The same holds for `authMiddleware()` and `requireAuth()` from [`@bunary/auth/provider`](#using-with-bunarycore). Tested against `@bunary/http` 0.3, which has no `ctx.cookies` or `ctx.app`: auth then appends the session cookie to the response itself, and the provider middleware needs `{ app }`. A future `ctx.cookies` jar whose options type has more attributes than `CookieOptions` still fits `AuthCookieJar`.
+The same holds for `authMiddleware()` and `requireAuth()` from [`@bunary/auth/provider`](#using-with-bunarycore). The examples use `@bunary/http` 1.0's `createRouter()`; 0.3 has no router and no `@bunary/http/provider`, so call its `createApp<TLocals>()` (which is not core's `createApp`) the same way. Tested against `@bunary/http` 0.3, which has no `ctx.cookies` or `ctx.app`: auth then appends the session cookie to the response itself, and the provider middleware needs `{ app }`. A future `ctx.cookies` jar whose options type has more attributes than `CookieOptions` still fits `AuthCookieJar`.
 
 ### AuthContext methods
 
@@ -223,13 +223,13 @@ The user object the provider returns becomes `auth.user()`. Strip fields such as
 A cookie session for browser apps. The session is an encrypted JWT (jose, `dir` key management with `A256GCM`) that holds only the user id and an `exp`, stored in a cookie. Nothing is kept on the server.
 
 ```ts
-import { createApp } from "@bunary/http";
+import { createRouter } from "@bunary/http";
 import { createAuth, createSessionGuard } from "@bunary/auth";
 import type { AuthLocals } from "@bunary/auth";
 
-const app = createApp<AuthLocals>();
+const router = createRouter<AuthLocals>();
 
-app.use(
+router.use(
   createAuth<AuthLocals>({
     defaultGuard: "session",
     guards: {
@@ -241,19 +241,19 @@ app.use(
   }),
 );
 
-app.post("/login", async (ctx) => {
+router.post("/login", async (ctx) => {
   const { email, password } = await ctx.json<{ email: string; password: string }>();
   const result = await ctx.locals.auth.attempt({ email, password });
   if (!result) return new Response("Invalid credentials", { status: 401 });
   return { user: { id: result.user.id } };
 });
 
-app.get("/me", async (ctx) => {
+router.get("/me", async (ctx) => {
   const user = await ctx.locals.auth.authenticate();
   return user ? { id: user.id } : new Response(null, { status: 401 });
 });
 
-app.post("/logout", async (ctx) => {
+router.post("/logout", async (ctx) => {
   await ctx.locals.auth.logout();
   return new Response(null, { status: 303, headers: { Location: "/" } });
 });
@@ -300,7 +300,7 @@ When the credentials don't match, `attempt()` resolves to `false`, sets no user 
 
 ```ts
 // JWT: issue a token from a login endpoint
-app.post("/token", async (ctx) => {
+router.post("/token", async (ctx) => {
   const result = await ctx.locals.auth.attempt(await ctx.json(), "jwt");
   if (!result) return new Response(null, { status: 401 });
   return { token: result.token };
@@ -508,9 +508,10 @@ Both return an `AuthMiddleware<AuthAppRequestContext<TLocals>>`, where `AuthAppR
 | `requireAuth(options?)` | answers `401` with an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem response and skips the handler | `RequiredAuthLocals` (`{ auth: AuthContext; user: AuthUser }`) |
 
 ```ts
+import { createApp } from "@bunary/core";
 import { createRouter } from "@bunary/http";
 import { httpProvider } from "@bunary/http/provider";
-import { requireAuth, type RequiredAuthLocals } from "@bunary/auth/provider";
+import { authProvider, requireAuth, type RequiredAuthLocals } from "@bunary/auth/provider";
 
 const router = createRouter<RequiredAuthLocals>();
 router.use(requireAuth<RequiredAuthLocals>());

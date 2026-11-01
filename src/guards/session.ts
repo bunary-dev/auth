@@ -77,7 +77,7 @@ const KEY_LENGTH = 32;
  * ```ts
  * import { createAuth, createSessionGuard } from "@bunary/auth";
  *
- * app.use(createAuth({
+ * router.use(createAuth({
  *   defaultGuard: "session",
  *   guards: {
  *     session: createSessionGuard({
@@ -87,7 +87,7 @@ const KEY_LENGTH = 32;
  *   },
  * }));
  *
- * app.post("/login", async (ctx) => {
+ * router.post("/login", async (ctx) => {
  *   const result = await ctx.locals.auth.attempt(await ctx.json());
  *   return result ? { ok: true } : new Response(null, { status: 401 });
  * });

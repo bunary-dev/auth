@@ -380,14 +380,14 @@ export interface AuthManagerInterface {
 /**
  * Shape of `ctx.locals` added by the `createAuth()` middleware.
  *
- * Pass it (or a type extending it) to `@bunary/http`'s `createApp<TLocals>()`
+ * Pass it (or a type extending it) to `@bunary/http`'s `createRouter<TLocals>()`
  * and to `createAuth<TLocals>()` to get a typed `ctx.locals.auth`.
  *
  * @example
  * ```ts
  * type Locals = AuthLocals & { requestId: string };
- * const app = createApp<Locals>();
- * app.use(createAuth<Locals>(config));
+ * const router = createRouter<Locals>();
+ * router.use(createAuth<Locals>(config));
  * ```
  */
 export type AuthLocals = {
