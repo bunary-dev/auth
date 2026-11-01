@@ -30,50 +30,18 @@ function exportedNames(file: string): Set<string> {
 	return names;
 }
 
-/**
- * The examples target `@bunary/http` 1.0 (the version whose routers set
- * `ctx.app` under `httpProvider()`), but the dev dependency is still 0.3.
- * These lists mirror http 1.0.0-rc.1's `src/index.ts` and `src/provider.ts`
- * (runtime exports and the types an example would plausibly import). 1.0
- * has no `createApp`: the app comes from `@bunary/core`.
- */
-const http = new Set([
-	"createCookieJar",
-	"cors",
-	"createRouter",
-	"BodyParseError",
-	"html",
-	"json",
-	"redirect",
-	"status",
-	"text",
-	"abort",
-	"HttpError",
-	"isHttpError",
-	"problem",
-	"problemResponse",
-	"rateLimit",
-	"Resource",
-	"toResponse",
-	"serveStatic",
-	"sse",
-	"CookieJar",
-	"HttpConfig",
-	"Middleware",
-	"RequestContext",
-	"Router",
-	"RouterOptions",
-]);
-const httpProvider = new Set(["httpProvider", "RouterToken", "serve"]);
-
 const packages: Record<string, Set<string>> = {
 	"@bunary/auth": exportedNames(join(root, "src/index.ts")),
 	"@bunary/auth/provider": exportedNames(join(root, "src/provider.ts")),
 	"@bunary/core": exportedNames(
 		join(root, "node_modules/@bunary/core/dist/index.d.ts"),
 	),
-	"@bunary/http": http,
-	"@bunary/http/provider": httpProvider,
+	"@bunary/http": exportedNames(
+		join(root, "node_modules/@bunary/http/dist/index.d.ts"),
+	),
+	"@bunary/http/provider": exportedNames(
+		join(root, "node_modules/@bunary/http/dist/provider.d.ts"),
+	),
 	jose: exportedNames(join(root, "node_modules/jose/dist/types/index.d.ts")),
 };
 
@@ -148,8 +116,8 @@ describe("doc and JSDoc examples", () => {
 		for (const { from } of createApp) expect(from).toBe("@bunary/core");
 	});
 
-	// Core's createApp takes no locals type; a typed app is http 0.3's
-	// createApp, which http 1.0 replaced with createRouter<TLocals>().
+	// Core's createApp takes no locals type; a typed router is http's
+	// createRouter<TLocals>().
 	test("never call createApp with a locals type argument", () => {
 		const wrong = all
 			.filter(({ text }) => /\bcreateApp</.test(text))

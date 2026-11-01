@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-01
+
+The 0.4.0 baseline shared by every bunary package. The last npm release of `@bunary/auth` is 0.1.0 (0.2.0 was never published, and its `v0.2.0` tag predates the jose rewrite), so everything below is new relative to npm. There is no 0.3.0 (#95)
+
 ### Breaking
 
-- The optional `@bunary/core` peer range is now `^1.0.0-rc.1` (was `^0.2.0`), which has `defineProvider` and `createToken` (#78)
+- The optional `@bunary/core` peer range is now `^0.4.0` (was `^0.2.0`), the core release with `defineProvider` and `createToken` (#78, #95)
 - `createJwtGuard` now verifies with [jose](https://github.com/panva/jose) `jwtVerify`, replacing the hand-written JWT parsing and HS256 verification. `secret` is optional now: pass exactly one of `secret`, `key` or `jwksUrl`. Invalid key configuration throws at construction (no or several key sources, empty `algorithms`, `none`, or an HMAC/asymmetric mismatch between the key source and `algorithms`) (#76)
 - Removed the global singleton helpers `auth`, `setAuthManager`, `getAuthManager` and `clearAuthManager`. Use `createAuth()` or `createAuthManager().createContext({ request })` (#76)
 - Removed `installAuthPlugin` together with the `AuthPlugin`, `AuthPluginRouter` and `InstallableAuthManager` types. `createAuthManager` now returns `AuthManagerInterface` and no longer has an internal `_guards` property (#76)
@@ -18,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Developed and tested against the npm releases `@bunary/core` 0.4.0 and `@bunary/http` 0.4.0 (the vendored core tarball is gone). With http 0.4, `createAuth()` and the provider middleware use http's `ctx.cookies` (http writes the session cookie) and `ctx.app` (no `{ app }` option needed under `httpProvider()`). Docs install `@bunary/auth@^0.4.0` and read the request body with `ctx.body.json()` (#95)
+- `prepack` runs `bun run build`, so `bun pm pack` and `npm publish` from a clean checkout ship `dist/` (#95)
 - `@bunary/auth` no longer requires any other bunary package: `@bunary/http` is no longer a peer dependency (reversing #55/#76), and nothing in `src/` or the shipped `.d.ts` imports it. `createAuth()`, `authMiddleware()` and `requireAuth()` now return auth's own `AuthMiddleware<Ctx>` over the new structural `AuthRequestContext` (`request`, optional `cookies`, `locals`, optional `app`), with `AuthCookieJar` (`CookieJar` is kept as an alias) and `AuthHandlerResult`; `@bunary/auth/provider` adds `AuthAppRequestContext`. http's `RequestContext` and `app.use()` accept them without casts. `requireAuth()`'s 401 problem response is now always built by auth (the provider entry no longer imports `@bunary/http` at runtime to look for `problem()`, which http 0.3 does not have). `@bunary/core` stays an optional peer used only by `@bunary/auth/provider` (#84)
 
 ### Added

@@ -9,13 +9,13 @@
       },
       "devDependencies": {
         "@biomejs/biome": "2.6.3",
-        "@bunary/core": "file:./vendor/bunary-core-1.0.0-rc.2.tgz",
-        "@bunary/http": "^0.3.0",
+        "@bunary/core": "^0.4.0",
+        "@bunary/http": "^0.4.0",
         "@types/bun": "^1.4.2",
         "typescript": "^7.0.2",
       },
       "peerDependencies": {
-        "@bunary/core": "^1.0.0-rc.1",
+        "@bunary/core": "^0.4.0",
       },
       "optionalPeers": [
         "@bunary/core",
@@ -45,9 +45,9 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.6.3", "", { "os": "win32", "cpu": "x64" }, "sha512-GhtOPphBWlnCepqpNk/w5eGN5oGRCzL20EbAkL1XCIpyboeVC9R642noyT43l8LSenGS4qz9IL8sKPfwY37V/Q=="],
 
-    "@bunary/core": ["@bunary/core@./vendor/bunary-core-1.0.0-rc.2.tgz", { "dependencies": { "@standard-schema/spec": "^1.1.0" } }, "sha512-1Ff9biIW5a3FULZZqewZNvtZ3x1aqdKGOezX0DUdnyLLSe/qQlCj2Jvdk61XEJSzrxtQISfna2rs+NX10SBOSg=="],
+    "@bunary/core": ["@bunary/core@0.4.0", "", { "dependencies": { "@standard-schema/spec": "^1.1.0" } }, "sha512-ksZTrYQtKnAaHpswckJosOEwOIyu5bR7LIU/JilxGb+IttQ+SkYZ7XC2T9En8dpFEGlKvD1+tbqlghYOryoemw=="],
 
-    "@bunary/http": ["@bunary/http@0.3.0", "", {}, "sha512-jD7mPZ6iVbx8A3z3LhM+YgUufhdwI4wWyY06FE3BJH3zrUI3fV3FMKwtIVG1ipl2tAafU3b8BpZJm/3Luol1pw=="],
+    "@bunary/http": ["@bunary/http@0.4.0", "", { "dependencies": { "cookie": "2.0.1" }, "peerDependencies": { "@bunary/core": "^0.4.0" }, "optionalPeers": ["@bunary/core"] }, "sha512-ZGTLMZ1nB50pQnpjgyQpHbCNzsxyNNa+XqO0ioJbJqMj0RRJ4XvuSfZIsWF+XHQE6DuUePtIgpOaYfdpdQHHVA=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
@@ -96,6 +96,8 @@
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
 
     "bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
+
+    "cookie": ["cookie@2.0.1", "", {}, "sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w=="],
 
     "jose": ["jose@6.2.14", "", {}, "sha512-3JasLuki1NRLQvY4wCoC37KZk4qxoBx2k2aFqLxT84IezqW0bkJKnNtxnZj/Fu1xsQivoc/lytxaRHJoGLjJ1A=="],
 

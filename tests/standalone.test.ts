@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Application } from "@bunary/core";
-import { createApp, type Middleware, type RequestContext } from "@bunary/http";
+import {
+	createRouter,
+	type Middleware,
+	type RequestContext,
+} from "@bunary/http";
 import { createAuth } from "../src/appScoped.js";
 import { createBasicGuard } from "../src/guards/basic.js";
 import { createSessionGuard } from "../src/guards/session.js";
@@ -46,7 +50,7 @@ function typeChecks() {
 	const b: Middleware = authMiddleware();
 	const c: Middleware<RequiredAuthLocals> = requireAuth<RequiredAuthLocals>();
 	void [a, b, c];
-	const app = createApp<AuthLocals>();
+	const app = createRouter<AuthLocals>();
 	app.use(createAuth<AuthLocals>(config));
 	app.use(authMiddleware<AuthLocals>());
 
@@ -168,7 +172,7 @@ describe("standalone (no @bunary/http)", () => {
 
 describe("with @bunary/http", () => {
 	test("app.use(authMiddleware()) and createAuth() work end to end", async () => {
-		const app = createApp<AuthLocals>();
+		const app = createRouter<AuthLocals>();
 		app.use(
 			createAuth<AuthLocals>({
 				defaultGuard: "basic",

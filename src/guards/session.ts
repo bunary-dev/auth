@@ -88,7 +88,7 @@ const KEY_LENGTH = 32;
  * }));
  *
  * router.post("/login", async (ctx) => {
- *   const result = await ctx.locals.auth.attempt(await ctx.json());
+ *   const result = await ctx.locals.auth.attempt(await ctx.body.json());
  *   return result ? { ok: true } : new Response(null, { status: 401 });
  * });
  * ```

@@ -144,7 +144,7 @@ export interface AuthMiddlewareOptions {
 	guard?: string;
 	/**
 	 * Application to resolve {@link AuthToken} from. Defaults to `ctx.app`,
-	 * which `@bunary/http` ≥ 1.0 sets on routers mounted on a core app.
+	 * which `@bunary/http` sets on routers mounted on a core app.
 	 */
 	app?: Application;
 }

@@ -200,10 +200,10 @@ console.log(await (res as Response).text());
 	test("main entry typechecks without @bunary/core installed", () => {
 		const dir = consumer("no-core", false, {
 			"index.ts": `
-import { createApp } from "@bunary/http";
+import { createRouter } from "@bunary/http";
 import { createAuth, createBasicGuard, type AuthLocals } from "@bunary/auth";
 
-const app = createApp<AuthLocals>();
+const app = createRouter<AuthLocals>();
 app.use(createAuth<AuthLocals>({
 	defaultGuard: "basic",
 	guards: { basic: createBasicGuard({ verify: () => null }) },

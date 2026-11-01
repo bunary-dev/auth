@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type Application, BunaryError, createApp } from "@bunary/core";
-import { createApp as createHttpApp, type RequestContext } from "@bunary/http";
+import { createRouter } from "@bunary/http";
+import { httpProvider } from "@bunary/http/provider";
 import { createBasicGuard } from "../src/guards/basic.js";
 import { createSessionGuard } from "../src/guards/session.js";
 import {
@@ -11,7 +12,12 @@ import {
 	type RequiredAuthLocals,
 	requireAuth,
 } from "../src/provider.js";
-import type { AuthConfig, AuthContext, AuthUser } from "../src/types.js";
+import type {
+	AuthConfig,
+	AuthContext,
+	AuthRequestContext,
+	AuthUser,
+} from "../src/types.js";
 import { createMemoryProvider } from "./helpers.js";
 
 const basicGuard = createBasicGuard({
@@ -33,15 +39,10 @@ function bootApp(auth: unknown): Promise<Application> {
 function makeCtx(
 	request: Request,
 	app?: Application,
-): RequestContext & { app?: Application } {
+): AuthRequestContext & { app?: Application } {
 	return {
 		request,
-		params: {},
-		query: new URL(request.url).searchParams,
 		locals: {},
-		json: <T>() => request.json() as Promise<T>,
-		text: () => request.text(),
-		formData: () => request.formData(),
 		...(app && { app }),
 	};
 }
@@ -277,7 +278,7 @@ describe("requireAuth", () => {
 
 	test("works as @bunary/http middleware end to end", async () => {
 		const app = await bootApp(basicConfig);
-		const http = createHttpApp<RequiredAuthLocals>();
+		const http = createRouter<RequiredAuthLocals>();
 		http.use(requireAuth<RequiredAuthLocals>({ app }));
 		http.get("/me", (ctx) => ({ id: ctx.locals.user.id }));
 
@@ -297,9 +298,30 @@ describe("requireAuth", () => {
 		expect(denied.status).toBe(401);
 	});
 
+	test("reads ctx.app from a router mounted with httpProvider()", async () => {
+		const http = createRouter<RequiredAuthLocals>();
+		http.use(requireAuth<RequiredAuthLocals>());
+		http.get("/me", (ctx) => ({ id: ctx.locals.user.id }));
+		await createApp({
+			config: { app: { name: "auth-test" }, auth: basicConfig } as never,
+			providers: [authProvider, httpProvider(http)],
+		}).boot();
+
+		const ok = await http.fetch(
+			new Request("http://localhost/me", {
+				headers: basicHeader("admin", "s3cret"),
+			}),
+		);
+		expect(ok.status).toBe(200);
+		expect(await ok.json()).toEqual({ id: 1 });
+
+		const denied = await http.fetch(new Request("http://localhost/me"));
+		expect(denied.status).toBe(401);
+	});
+
 	test("optional variant types user as nullable", async () => {
 		const app = await bootApp(basicConfig);
-		const http = createHttpApp<AuthUserLocals>();
+		const http = createRouter<AuthUserLocals>();
 		http.use(authMiddleware<AuthUserLocals>({ app }));
 		http.get("/me", (ctx) => ({ guest: ctx.locals.user === null }));
 
