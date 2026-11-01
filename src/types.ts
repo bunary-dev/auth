@@ -386,8 +386,8 @@ export interface AuthManagerInterface {
  * @example
  * ```ts
  * type Locals = AuthLocals & { requestId: string };
- * const app = createApp<Locals>();
- * app.use(createAuth<Locals>(config));
+ * const router = createRouter<Locals>();
+ * router.use(createAuth<Locals>(config));
  * ```
  */
 export type AuthLocals = {

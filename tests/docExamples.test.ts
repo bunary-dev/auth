@@ -105,27 +105,31 @@ function importsIn(text: string, where: string): ExampleImport[] {
 	return found;
 }
 
-function exampleImports(): ExampleImport[] {
-	const found: ExampleImport[] = [];
+type Example = { where: string; text: string };
+
+/** JSDoc comments in src/ and ```ts blocks in README.md and docs/index.md. */
+function examples(): Example[] {
+	const found: Example[] = [];
 	for (const file of sources(join(root, "src"))) {
-		for (const [comment] of readFileSync(file, "utf8").matchAll(
+		for (const [text] of readFileSync(file, "utf8").matchAll(
 			/\/\*\*[\s\S]*?\*\//g,
 		)) {
-			found.push(...importsIn(comment, file));
+			found.push({ where: file, text });
 		}
 	}
 	for (const file of ["README.md", "docs/index.md"]) {
-		for (const [block] of readFileSync(join(root, file), "utf8").matchAll(
+		for (const [text] of readFileSync(join(root, file), "utf8").matchAll(
 			/```ts[\s\S]*?```/g,
 		)) {
-			found.push(...importsIn(block, file));
+			found.push({ where: file, text });
 		}
 	}
 	return found;
 }
 
 describe("doc and JSDoc examples", () => {
-	const imports = exampleImports();
+	const all = examples();
+	const imports = all.flatMap(({ where, text }) => importsIn(text, where));
 
 	test("finds the examples' imports", () => {
 		expect(imports.length).toBeGreaterThan(20);
@@ -142,5 +146,14 @@ describe("doc and JSDoc examples", () => {
 		const createApp = imports.filter(({ name }) => name === "createApp");
 		expect(createApp.length).toBeGreaterThan(0);
 		for (const { from } of createApp) expect(from).toBe("@bunary/core");
+	});
+
+	// Core's createApp takes no locals type; a typed app is http 0.3's
+	// createApp, which http 1.0 replaced with createRouter<TLocals>().
+	test("never call createApp with a locals type argument", () => {
+		const wrong = all
+			.filter(({ text }) => /\bcreateApp</.test(text))
+			.map(({ where }) => where);
+		expect(wrong).toEqual([]);
 	});
 });
