@@ -35,10 +35,10 @@ describe("0.4.0 release baseline", () => {
 		}
 	});
 
-	test("CHANGELOG has a 0.4.0 release under an empty [Unreleased]", () => {
+	test("CHANGELOG has a 0.4.0 release under [Unreleased]", () => {
 		const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
 		expect(changelog).toMatch(
-			/## \[Unreleased\]\s+## \[0\.4\.0\] - \d{4}-\d{2}-\d{2}/,
+			/## \[Unreleased\]\n[\s\S]*?\n## \[0\.4\.0\] - \d{4}-\d{2}-\d{2}/,
 		);
 	});
 
@@ -52,9 +52,11 @@ describe("0.4.0 release baseline", () => {
 		}
 	});
 
-	// prepack builds dist/, so a pack (or npm publish) from a clean checkout
-	// still ships the entry points.
-	test("pack builds and lists only dist, README, CHANGELOG and LICENSE", () => {
+	// npm publish rebuilds dist/ via prepublishOnly; bun pm pack does not, so
+	// build first and check what a pack of a fresh build ships.
+	test("pack lists only dist, README, CHANGELOG and LICENSE", () => {
+		const build = Bun.spawnSync(["bun", "run", "build"], { cwd: root });
+		expect(build.exitCode).toBe(0);
 		const result = Bun.spawnSync(["bun", "pm", "pack", "--dry-run"], {
 			cwd: root,
 		});

@@ -26,12 +26,13 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/provider.ts --outdir ./dist --target bun --splitting --packages external && tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && bun build ./src/index.ts ./src/provider.ts --outdir ./dist --target bun --splitting --packages external && tsc -p tsconfig.build.json",
     "test": "bun test",
     "lint": "biome check ./src ./tests",
     "format": "biome check --write ./src ./tests",
     "typecheck": "tsc --noEmit",
-    "prepack": "bun run build",
+    "prepublishOnly": "bun run clean && bun run build && bun test && bun run typecheck",
     "pack:check": "bun pm pack --dry-run"
   },
   "keywords": [
