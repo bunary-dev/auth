@@ -7,7 +7,7 @@ Requires Bun ≥ 1.4.0. No other bunary package is required: auth types its midd
 ## Installation
 
 ```bash
-bun add @bunary/auth@^0.4.0
+bun add @bunary/auth@^0.5.0
 bun add @bunary/http@^0.4.0   # for the Quick Start below
 ```
 

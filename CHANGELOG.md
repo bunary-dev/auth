@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-03
+
+### Added
+
+- `JwtGuardOptions.mapUser` may be async (`AuthUser | null | Promise<AuthUser | null>`), so a JWT guard can load the user from a database and check they still exist or aren't disabled. A mapper that rejects yields an unauthenticated request (`null`), like one that throws; `authenticate()` still never throws. Sync mappers work unchanged (#100)
+
 ### Changed
 
 - Publishing now always rebuilds `dist` from clean (#97)
+- Docs install `@bunary/auth@^0.5.0` (`^0.4.0` does not resolve to 0.5.0) (#100)
 
 ## [0.4.0] - 2026-11-01
 

@@ -7,12 +7,12 @@ Requires Bun ≥ 1.4.0.
 ## Installation
 
 ```bash
-bun add @bunary/auth@^0.4.0
+bun add @bunary/auth@^0.5.0
 ```
 
 `@bunary/auth` has no required bunary dependencies: its only dependency is `jose`, installed automatically. The middleware is typed against auth's own small [structural types](#structural-types-authrequestcontext-authcookiejar-authmiddleware), so it works with `@bunary/http` (see [Using with @bunary/http](#using-with-bunaryhttp)) or with any context of the same shape, without importing http. `@bunary/core` (^0.4.0) is an optional peer dependency, needed only for [`@bunary/auth/provider`](#using-with-bunarycore).
 
-The Quick Start uses `@bunary/http`; install it alongside: `bun add @bunary/auth@^0.4.0 @bunary/http@^0.4.0`.
+The Quick Start uses `@bunary/http`; install it alongside: `bun add @bunary/auth@^0.5.0 @bunary/http@^0.4.0`.
 
 ## Quick Start
 
@@ -322,7 +322,7 @@ Reads `Authorization: Bearer <jwt>` (scheme is case-insensitive) and verifies th
 | `audience` | — | Required `aud` value(s); any match is accepted |
 | `clockToleranceSeconds` | `0` | Leeway for `exp` and `nbf` |
 | `requireExp` | `true` | Reject tokens that have no `exp` claim |
-| `mapUser` | see below | Map the verified payload to an `AuthUser` |
+| `mapUser` | see below | Map the verified payload to an `AuthUser` (sync or async) |
 | `provider` | — | `UserProvider` for `attempt()` |
 | `signingKey` | — | Private key (`CryptoKey`, `KeyObject` or private JWK) for issuing tokens with an asymmetric algorithm |
 | `ttlSeconds` | `3600` | Lifetime of issued tokens (`exp`) |
@@ -368,7 +368,7 @@ With `jwksUrl`, keys are fetched and cached by jose's `createRemoteJWKSet`, whic
 
 ### Failure behaviour
 
-`authenticate` never throws for bad input. A missing or non-Bearer header, a malformed token (bad base64url, a header or payload that is `null`, an array or otherwise not a JSON object), a bad signature, a disallowed algorithm, failed claim checks or a `mapUser` that throws all return `null`.
+`authenticate` never throws for bad input. A missing or non-Bearer header, a malformed token (bad base64url, a header or payload that is `null`, an array or otherwise not a JSON object), a bad signature, a disallowed algorithm, failed claim checks or a `mapUser` that throws or rejects all return `null`.
 
 ### User mapping
 
@@ -380,6 +380,17 @@ createJwtGuard({
   mapUser: (payload) => ({ id: payload.sub as string, email: payload.email as string }),
 });
 ```
+
+`mapUser` may be async, so it can load the user from a database and reject tokens for users that were deleted or disabled since the token was issued:
+
+```ts
+createJwtGuard({
+  secret: process.env.JWT_SECRET!,
+  mapUser: async (payload) => (await users.retrieveById(payload.sub as string)) ?? null,
+});
+```
+
+Returning (or resolving) `null` leaves the request unauthenticated. So does a mapper that throws or rejects, e.g. on a database error: `authenticate` catches it and returns `null` rather than throwing.
 
 ### Issuing tokens
 
@@ -468,7 +479,7 @@ interface Guard {
 `@bunary/auth/provider` wires auth into a `@bunary/core` application. It is a separate entry point because it imports `@bunary/core`; the main `@bunary/auth` entry never does (at runtime or in its types), so apps without core typecheck and run without it.
 
 ```bash
-bun add @bunary/auth@^0.4.0 @bunary/http@^0.4.0 @bunary/core@^0.4.0
+bun add @bunary/auth@^0.5.0 @bunary/http@^0.4.0 @bunary/core@^0.4.0
 ```
 
 Put the auth config under the `auth` key of your bunary config and add `authProvider`:
