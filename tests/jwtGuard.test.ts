@@ -14,7 +14,7 @@ import {
 	type JWK,
 	SignJWT,
 } from "jose";
-import { createJwtGuard } from "../src/guards/jwt.js";
+import { createJwtGuard, type JwtGuardOptions } from "../src/guards/jwt.js";
 
 describe("createJwtGuard", () => {
 	const secret = "test-secret-key";
@@ -1053,5 +1053,106 @@ describe("createJwtGuard with jose: algorithms, keys and JWKS", () => {
 			const token = await sign("HS512", new TextEncoder().encode(secret));
 			expect((await guard.authenticate(bearer(token)))?.id).toBe("123");
 		});
+	});
+});
+
+describe("createJwtGuard async mapUser", () => {
+	const secret = "test-secret-key";
+
+	async function requestWithToken(): Promise<Request> {
+		const token = await createTestJwt(
+			{ sub: "123", exp: Math.floor(Date.now() / 1000) + 3600 },
+			secret,
+		);
+		return new Request("http://localhost/test", {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+	}
+
+	test("authenticates with the user an async mapUser resolves", async () => {
+		const users = new Map([["123", { id: 123, email: "a@example.com" }]]);
+		const guard = createJwtGuard({
+			secret,
+			mapUser: async (payload) => {
+				await Bun.sleep(1);
+				return users.get(payload.sub as string) ?? null;
+			},
+		});
+
+		const user = await guard.authenticate(await requestWithToken());
+
+		expect(user).toEqual({ id: 123, email: "a@example.com" });
+	});
+
+	test("returns null when an async mapUser resolves null", async () => {
+		const guard = createJwtGuard({
+			secret,
+			mapUser: async () => null,
+		});
+
+		expect(await guard.authenticate(await requestWithToken())).toBeNull();
+	});
+
+	test("returns null, not a rejection, when an async mapUser rejects", async () => {
+		const guard = createJwtGuard({
+			secret,
+			mapUser: async () => {
+				throw new Error("database unavailable");
+			},
+		});
+
+		const result = guard.authenticate(await requestWithToken());
+
+		await expect(result).resolves.toBeNull();
+	});
+
+	test("returns null when mapUser returns a rejected promise", async () => {
+		const guard = createJwtGuard({
+			secret,
+			mapUser: () => Promise.reject(new Error("database unavailable")),
+		});
+
+		await expect(
+			guard.authenticate(await requestWithToken()),
+		).resolves.toBeNull();
+	});
+
+	test("a sync mapUser still works", async () => {
+		const guard = createJwtGuard({
+			secret,
+			mapUser: (payload) => ({ id: payload.sub as string }),
+		});
+
+		expect(await guard.authenticate(await requestWithToken())).toEqual({
+			id: "123",
+		});
+	});
+
+	test("a sync mapUser that throws still yields null", async () => {
+		const guard = createJwtGuard({
+			secret,
+			mapUser: () => {
+				throw new Error("Mapper error");
+			},
+		});
+
+		await expect(
+			guard.authenticate(await requestWithToken()),
+		).resolves.toBeNull();
+	});
+
+	// Type-level checks: these fail `bun run typecheck`, not `bun test`.
+	test("sync and async mappers both type-check as JwtGuardOptions.mapUser", () => {
+		const sync: JwtGuardOptions["mapUser"] = (payload) => ({
+			id: payload.sub as string,
+		});
+		const syncNull: JwtGuardOptions["mapUser"] = () => null;
+		const async: JwtGuardOptions["mapUser"] = async (payload) => ({
+			id: payload.sub as string,
+		});
+		const asyncNull: JwtGuardOptions["mapUser"] = async () => null;
+		// @ts-expect-error a mapper must return an AuthUser, null or a promise of one
+		const wrong: JwtGuardOptions["mapUser"] = async () => "not a user";
+		expect([sync, syncNull, async, asyncNull, wrong]).toHaveLength(5);
 	});
 });

@@ -88,10 +88,15 @@ export interface JwtGuardOptions {
 	 * customClaims are the payload claims other than the registered ones
 	 * (`iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`).
 	 *
+	 * May be async, e.g. to load the user from a database. A mapper that
+	 * throws or rejects makes the request unauthenticated (`null`).
+	 *
 	 * @param payload - The verified JWT payload
-	 * @returns The authenticated user or null if mapping fails
+	 * @returns The authenticated user (or a promise of it), or null if mapping fails
 	 */
-	mapUser?: (payload: Record<string, unknown>) => AuthUser | null;
+	mapUser?: (
+		payload: Record<string, unknown>,
+	) => AuthUser | null | Promise<AuthUser | null>;
 
 	/**
 	 * User provider for `attempt(credentials)`. Without it, `attempt()` throws.
@@ -281,9 +286,10 @@ export function createJwtGuard(options: JwtGuardOptions): Guard {
 
 			if (options.mapUser) {
 				try {
-					return options.mapUser(payload);
+					// Await inside the try so a rejected promise is caught too
+					return await options.mapUser(payload);
 				} catch {
-					// Mapper threw - return null (don't throw)
+					// Mapper threw or rejected - return null (don't throw)
 					return null;
 				}
 			}

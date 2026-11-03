@@ -5,9 +5,9 @@ import pkg from "../package.json";
 
 const root = join(import.meta.dir, "..");
 
-describe("0.4.0 release baseline", () => {
-	test("package version is 0.4.0", () => {
-		expect(pkg.version).toBe("0.4.0");
+describe("release baseline", () => {
+	test("package version is 0.5.0", () => {
+		expect(pkg.version).toBe("0.5.0");
 	});
 
 	test("@bunary/core is an optional ^0.4.0 peer", () => {
@@ -35,18 +35,18 @@ describe("0.4.0 release baseline", () => {
 		}
 	});
 
-	test("CHANGELOG has a 0.4.0 release under [Unreleased]", () => {
+	test("CHANGELOG has the 0.5.0 release under [Unreleased]", () => {
 		const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8");
 		expect(changelog).toMatch(
-			/## \[Unreleased\]\n[\s\S]*?\n## \[0\.4\.0\] - \d{4}-\d{2}-\d{2}/,
+			/## \[Unreleased\]\n[\s\S]*?\n## \[0\.5\.0\] - \d{4}-\d{2}-\d{2}/,
 		);
 	});
 
-	test("docs install @bunary/auth@^0.4.0 and name no pre-release as current", () => {
+	test("docs install @bunary/auth@^0.5.0 and name no pre-release as current", () => {
 		for (const file of ["README.md", "docs/index.md"]) {
 			const text = readFileSync(join(root, file), "utf8");
-			expect(text).toContain("bun add @bunary/auth@^0.4.0");
-			expect(text).not.toMatch(/bun add @bunary\/auth(?!@\^0\.4\.0)/);
+			expect(text).toContain("bun add @bunary/auth@^0.5.0");
+			expect(text).not.toMatch(/bun add @bunary\/auth(?!@\^0\.5\.0)/);
 			expect(text).not.toContain("1.0.0-rc");
 			expect(text).not.toMatch(/@bunary\/http`? (≥ )?(0\.3|1\.0)/);
 		}
